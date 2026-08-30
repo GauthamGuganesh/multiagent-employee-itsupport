@@ -23,6 +23,14 @@ def test_render_environment_aliases_and_postgres_normalization():
     assert settings.cors_origins == ["https://app.example.com", "https://preview.example.com"]
 
 
+def test_render_comma_separated_cors_environment_value(monkeypatch):
+    monkeypatch.setenv("CORS_ORIGINS", "https://app.example.com,https://preview.example.com")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.cors_origins == ["https://app.example.com", "https://preview.example.com"]
+
+
 def test_render_health_and_voice_token_routes_are_registered():
     paths = set(create_app().openapi()["paths"])
 

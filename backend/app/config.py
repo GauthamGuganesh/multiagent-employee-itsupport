@@ -20,6 +20,9 @@ class Settings(BaseSettings):
         env_file=str(_ENV_FILE),
         env_prefix="IT_",
         extra="ignore",
+        # Render commonly stores CORS_ORIGINS as a comma-separated string.
+        # Decode it in _parse_cors_origins instead of Pydantic requiring JSON.
+        enable_decoding=False,
     )
 
     # --- LLM ---
