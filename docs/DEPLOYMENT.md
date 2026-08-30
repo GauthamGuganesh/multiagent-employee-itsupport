@@ -33,7 +33,7 @@ Set these environment variables on Render. Do not add them to Git.
 | `IT_MEMORY_BACKEND` | `mem0` |
 | `ELEVENLABS_API_KEY` | ElevenLabs server key |
 | `ELEVENLABS_AGENT_ID` | Private Conversational AI agent ID |
-| `IT_ELEVENLABS_CUSTOM_LLM_KEY` | Optional bearer key for the echo-only Custom LLM smoke-test endpoint |
+| `IT_ELEVENLABS_CUSTOM_LLM_KEY` | Optional bearer key for the Custom LLM → LangGraph adapter |
 | `IT_SESSION_SECRET` | Long random signing secret; keep stable across deploys |
 | `IT_ADMIN_USERNAME` / `IT_ADMIN_PASSWORD` | Administrator demo login credentials |
 | `CORS_ORIGINS` | Exact Vercel origin, for example `https://your-project.vercel.app` |
@@ -101,7 +101,11 @@ For the private ElevenLabs Conversational AI agent, configure a webhook tool:
 | Inputs | `voice_bridge_token`, `message`, optional `session_id` |
 | Dynamic variables | `employee_id`, `voice_bridge_token` |
 
-The signed-agent webhook is the real application path and preserves the support session through the shared dispatcher. The current `POST /v1/chat/completions` endpoint remains an **echo-only SSE transport smoke test** by design; do not configure it as the production orchestration path until its later integration work is approved.
+The signed-agent webhook and `POST /v1/chat/completions` Custom LLM adapter
+both use the shared dispatcher. The Custom LLM adapter accepts a signed
+`voice_bridge_token` plus an optional GA-VoiceAI `session_id` in
+`elevenlabs_extra_body`; it reads only the latest `user` message and resumes
+the persisted session rather than trusting ElevenLabs message history.
 
 ## 5. Deployment smoke checks
 
@@ -114,11 +118,11 @@ curl https://YOUR-RENDER-SERVICE.onrender.com/health
 # Browser app → Render API
 # Sign in at the Vercel URL, then verify the employee chat starts a request.
 
-# ElevenLabs Custom LLM transport only (not LangGraph)
+# ElevenLabs Custom LLM → LangGraph adapter
 curl -N https://YOUR-RENDER-SERVICE.onrender.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $IT_ELEVENLABS_CUSTOM_LLM_KEY" \
-  -d '{"model":"gavoiceai-echo","stream":true,"messages":[{"role":"user","content":"hello"}]}'
+  -d '{"model":"ga-voiceai-support","stream":true,"voice_bridge_token":"<signed-bridge-token>","messages":[{"role":"user","content":"My VPN keeps disconnecting"}]}'
 ```
 
 The final command must produce an SSE `data:` frame followed by `data: [DONE]`. Confirm PostgreSQL through the successful migration, Neo4j through `seed_org`, Mem0 through a completed support session with `IT_MEMORY_BACKEND=mem0`, and ElevenLabs through a signed-URL voice session.

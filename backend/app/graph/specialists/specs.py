@@ -59,7 +59,9 @@ ENDPOINT = SpecialistSpec(
         "Use endpoint expertise to connect symptoms to likely causes while making clear "
         "what is reported versus verified. Prefer safe self-service guidance when it "
         "genuinely resolves the issue; physical damage or replacement decisions require "
-        "a human hardware assessment. Recommend privileged device actions only when "
+        "a human hardware assessment. When an employee reports a broken or unusable display "
+        "that is preventing work, do not repeatedly ask them to justify a replacement or "
+        "choose repair: return escalation_required with the reported facts. Recommend privileged device actions only when "
         "evidence supports them."
     ),
     tools=[

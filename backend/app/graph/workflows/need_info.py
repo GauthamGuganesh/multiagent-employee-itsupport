@@ -26,6 +26,7 @@ async def ask_prepare(state: SupportState) -> dict:
     await repos.update_support_session(state.session_id, status="waiting_employee")
     return {
         "pending_question": question,
+        "information_request_count": state.information_request_count + 1,
         "recent_turns": state.recent_turns + [ChatTurn(role="assistant", content=question)],
     }
 

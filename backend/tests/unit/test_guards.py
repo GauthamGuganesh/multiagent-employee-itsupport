@@ -8,11 +8,14 @@ from app.contracts.supervisor import SupervisorDecision
 from app.graph.guards import (
     check_cycle_budget,
     check_handoff_budget,
+    check_information_request,
     check_loop_signature,
     counts_as_handoff,
     decision_signature,
+    endpoint_damage_requires_hardware_handoff,
     security_requires_human,
 )
+from app.contracts.common import ChatTurn
 from app.graph.state import SupportState
 from tests.conftest import supervisor_decision
 
@@ -153,6 +156,45 @@ def test_loop_signature_ignores_other_signatures(monkeypatch):
     monkeypatch.setattr(get_settings(), "loop_signature_repeat_limit", 2)
     state = make_state(decision_signatures=["other", "other"])
     assert check_loop_signature(state, "abc123").tripped is False
+
+
+# --- employee-information guard ---------------------------------------------
+
+def test_rephrased_employee_question_trips_before_it_is_asked_again():
+    state = make_state(recent_turns=[
+        ChatTurn(
+            role="assistant",
+            content="Can you describe the specific display issue affecting your laptop?",
+        )
+    ])
+    verdict = check_information_request(
+        state,
+        "Could you describe the specific issue affecting your laptop display?",
+    )
+    assert verdict.tripped is True
+    assert verdict.kind == "repeated_information_request"
+
+
+def test_information_request_budget_is_session_lifetime(monkeypatch):
+    monkeypatch.setattr(get_settings(), "max_information_requests", 2)
+    verdict = check_information_request(
+        make_state(information_request_count=2), "What error message do you see?"
+    )
+    assert verdict.tripped is True
+    assert verdict.kind == "information_request_budget"
+
+
+def test_physical_display_damage_after_endpoint_question_requires_handoff():
+    state = make_state(
+        original_request="I need a replacement laptop.",
+        recent_turns=[
+            ChatTurn(role="employee", content="The screen is broken, shows lines, and I cannot work."),
+        ],
+        specialist_results=[make_result(
+            "endpoint", "need_more_information", question_for_employee="Can you describe the problem?"
+        )],
+    )
+    assert endpoint_damage_requires_hardware_handoff(state) is True
 
 
 # --- security_requires_human --------------------------------------------------

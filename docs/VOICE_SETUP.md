@@ -12,7 +12,7 @@ Add these values to `.env`:
 ```env
 ELEVENLABS_API_KEY=<server-side-api-key>
 ELEVENLABS_AGENT_ID=<private-agent-id>
-# Optional: protects the echo-only Custom LLM smoke-test endpoint.
+# Optional: protects the Custom LLM adapter endpoint.
 IT_ELEVENLABS_CUSTOM_LLM_KEY=<long-random-secret>
 ```
 
@@ -44,19 +44,27 @@ https://<temporary-host>/api/voice/agent-tool
 5. Do not use an ElevenLabs field as the authority for employee identity. The
    backend validates the signed bridge token and calls the shared dispatcher.
 
-## Custom LLM transport smoke test
+## Custom LLM adapter
 
-`POST /v1/chat/completions` is an OpenAI-compatible, echo-only endpoint for
-testing a Custom LLM connection. It returns “I heard you say: …” and never
-touches LangGraph, tools, tickets, or organization data. Set its URL to:
+`POST /v1/chat/completions` is an OpenAI-compatible adapter for an ElevenLabs
+Custom LLM. It validates the request, reads only the newest `user` message,
+and calls the same session dispatcher as web chat and the webhook tool. It
+does not use ElevenLabs message history as support-session state.
+
+Set its URL to:
 
 ```text
 https://<temporary-host>/v1/chat/completions
 ```
 
 If `IT_ELEVENLABS_CUSTOM_LLM_KEY` is set, configure a Bearer Authorization
-header with that exact value. Keep this endpoint for transport testing only;
-the employee app’s signed-agent flow is the production integration.
+header with that exact value. Configure the Custom LLM extra body with the
+signed `voice_bridge_token` from the authenticated `/api/voice/signed-url`
+response. Omit `session_id` on the first request; send the GA-VoiceAI support
+session ID returned as `X-GA-VoiceAI-Session-Id` (or
+`ga_voiceai_session_id` for a non-streaming response) on later requests. The
+adapter then resumes the persisted LangGraph session rather than replaying the
+external message history.
 
 ## Failure behavior
 

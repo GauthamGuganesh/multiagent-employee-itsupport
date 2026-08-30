@@ -10,14 +10,36 @@ import type { Profile } from "@/lib/types";
 import { ThemeToggle } from "@/components/theme";
 import { cx } from "@/components/ui";
 
+const PROFILE_CACHE_KEY = "ga-voiceai.employee-profile";
+
+type Me = { employee_id: string; profile: Profile | null };
+
+function cachedMe(): Me | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.sessionStorage.getItem(PROFILE_CACHE_KEY);
+    return stored ? (JSON.parse(stored) as Me) : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheMe(value: Me) {
+  if (typeof window === "undefined" || !value.profile?.name) return;
+  window.sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(value));
+}
+
 export function useMe() {
   const router = useRouter();
-  const [me, setMe] = useState<{ employee_id: string; profile: Profile | null } | null>(null);
+  const [me, setMe] = useState<Me | null>(cachedMe);
 
   useEffect(() => {
     api
-      .get<{ employee_id: string; profile: Profile | null }>("/api/auth/me")
-      .then(setMe)
+      .get<Me>("/api/auth/me")
+      .then((value) => {
+        cacheMe(value);
+        setMe(value.profile?.name ? value : (cachedMe() ?? value));
+      })
       .catch((e) => {
         if (isAuthError(e)) router.replace("/");
       });
@@ -32,6 +54,7 @@ export function EmployeeHeader({ employeeName }: { employeeName?: string }) {
 
   async function signOut() {
     await api.post("/api/auth/logout");
+    window.sessionStorage.removeItem(PROFILE_CACHE_KEY);
     router.push("/");
   }
 

@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Button, Card, Input } from "@/components/ui";
 
+const PROFILE_CACHE_KEY = "ga-voiceai.employee-profile";
+
 export default function LoginPage() {
   const router = useRouter();
   const [employeeId, setEmployeeId] = useState("");
@@ -19,10 +21,15 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await api.post("/api/auth/login", {
+      const result = await api.post<{ employee_id: string; profile: { name?: string } | null }>("/api/auth/login", {
         employee_id: employeeId.trim().toUpperCase(),
         password,
       });
+      if (result.profile?.name) {
+        window.sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(result));
+      } else {
+        window.sessionStorage.removeItem(PROFILE_CACHE_KEY);
+      }
       router.push("/support");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign-in failed.");

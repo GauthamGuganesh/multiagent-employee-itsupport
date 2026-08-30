@@ -1,0 +1,41 @@
+[
+  {
+    "id": "identity-lockout-confirmation",
+    "employee_id": "EMP-034",
+    "request": "I am locked out of my account after several sign-in attempts.",
+    "expected_pending": "confirmation",
+    "expected_agents": ["identity"]
+  },
+  {
+    "id": "endpoint-slow-device-diagnosis",
+    "employee_id": "EMP-041",
+    "request": "My laptop has become very slow and I can barely work.",
+    "expected_terminal": "resolved",
+    "expected_agents": ["endpoint"]
+  },
+  {
+    "id": "network-generic-vpn-clarification-and-security-handoff",
+    "employee_id": "EMP-014",
+    "request": "My VPN is not working.",
+    "reply": "It connects, then drops every ten minutes. I also saw an unfamiliar sign-in alert.",
+    "expected_initial_pending": "question",
+    "expected_terminal": "escalated",
+    "expected_agents": ["network", "security"]
+  },
+  {
+    "id": "security-phishing-clarification-and-escalation",
+    "employee_id": "EMP-034",
+    "request": "I received a suspicious email.",
+    "reply": "I clicked the link from billing@unknown.example before I realised it looked wrong.",
+    "expected_initial_pending": "question",
+    "expected_terminal": "escalated",
+    "expected_agents": ["security"]
+  },
+  {
+    "id": "endpoint-physical-display-damage",
+    "employee_id": "EMP-032",
+    "request": "My laptop screen was broken in an accident. It shows lines and I cannot work.",
+    "expected_terminal": "escalated",
+    "expected_agents": ["endpoint"]
+  }
+]

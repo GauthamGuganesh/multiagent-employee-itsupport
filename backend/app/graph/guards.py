@@ -4,6 +4,7 @@ Edges select, nodes mutate: these helpers are pure functions over state; the
 supervisor node applies their verdicts via Command updates.
 """
 import hashlib
+import re
 from dataclasses import dataclass
 
 from app.config import get_settings
@@ -16,6 +17,82 @@ class GuardVerdict:
     tripped: bool
     kind: str | None = None  # cycle_budget | handoff_budget | loop_signature
     reason: str | None = None
+
+
+def _question_terms(value: str) -> set[str]:
+    """Return the meaningful words used to spot a rephrased repeat question."""
+    stop_words = {
+        "a", "an", "and", "are", "can", "could", "do", "does", "for", "have", "i", "if",
+        "is", "it", "me", "of", "or", "please", "the", "to", "what", "would", "you", "your",
+    }
+    return {
+        word for word in re.findall(r"[a-z0-9]+", value.lower())
+        if len(word) > 2 and word not in stop_words
+    }
+
+
+def _is_rephrased_question(candidate: str, previous: str) -> bool:
+    candidate_terms = _question_terms(candidate)
+    previous_terms = _question_terms(previous)
+    if not candidate_terms or not previous_terms:
+        return candidate.strip().lower() == previous.strip().lower()
+    overlap = len(candidate_terms & previous_terms) / len(candidate_terms | previous_terms)
+    return overlap >= 0.65
+
+
+def check_information_request(state: SupportState, question: str) -> GuardVerdict:
+    """Prevent cross-turn re-interviews while allowing useful clarification.
+
+    The count is intentionally not reset by `ingest_node` or `ask_wait`: new
+    wording from the model is not new evidence from the employee.
+    """
+    limit = get_settings().max_information_requests
+    if state.information_request_count >= limit:
+        return GuardVerdict(
+            tripped=True,
+            kind="information_request_budget",
+            reason=(
+                f"automated follow-up question limit reached ({limit} questions without a decisive next step)"
+            ),
+        )
+
+    prior_questions = [turn.content for turn in state.recent_turns if turn.role == "assistant"]
+    if any(_is_rephrased_question(question, prior) for prior in prior_questions):
+        return GuardVerdict(
+            tripped=True,
+            kind="repeated_information_request",
+            reason="the same follow-up question was being repeated without new progress",
+        )
+    return GuardVerdict(tripped=False)
+
+
+def endpoint_damage_requires_hardware_handoff(state: SupportState) -> bool:
+    """Recognize enough employee-reported evidence to stop a hardware re-interview.
+
+    This is deliberately narrow: it applies only after Endpoint Support already
+    requested more information, and only for physical display damage that
+    prevents normal work. A human must assess repair versus replacement.
+    """
+    if not state.specialist_results:
+        return False
+    latest = state.specialist_results[-1]
+    if latest.agent != "endpoint" or latest.outcome != "need_more_information":
+        return False
+
+    employee_text = " ".join(
+        [state.original_request]
+        + [turn.content for turn in state.recent_turns if turn.role == "employee"]
+    ).lower()
+    display_issue = any(term in employee_text for term in ("screen", "display", "monitor", "lines"))
+    physical_damage = any(
+        term in employee_text
+        for term in ("broken", "damaged", "damage", "cracked", "shattered", "accident", "no display")
+    )
+    work_impact = any(
+        term in employee_text
+        for term in ("cannot work", "can't work", "unable to work", "not able to work", "disrupting my work")
+    )
+    return display_issue and physical_damage and work_impact
 
 
 def check_cycle_budget(state: SupportState) -> GuardVerdict:

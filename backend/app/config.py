@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     max_agent_handoffs: int = 4
     max_structured_output_retries: int = 2
     loop_signature_repeat_limit: int = 2
+    # A question is useful only when it unlocks a materially different next
+    # step. This session-wide guard prevents an LLM from rephrasing the same
+    # interview across employee replies.
+    max_information_requests: int = 2
     min_specialist_confidence: float = 0.35
 
     # --- Ticket aging ---

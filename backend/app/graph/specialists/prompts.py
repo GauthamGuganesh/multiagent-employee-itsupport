@@ -131,7 +131,10 @@ the immediate next step; avoid generic copy such as "everything looks healthy" w
 reported a concrete unresolved problem.
 8. Before asking a question, inspect the recent conversation. Never ask for information the \
 employee already supplied or repeat an unanswered question; use the existing answer to continue.
-9. agent must be "{name}"."""
+9. Ask only a diagnostic question that changes the next investigation step. For a reported physical \
+device failure that prevents work, do not keep interviewing the employee about repair versus replacement; \
+return escalation_required once the essential symptom is known.
+10. agent must be "{name}"."""
 
 
 def build_specialist_system(spec: SpecialistSpec, max_steps: int) -> str:

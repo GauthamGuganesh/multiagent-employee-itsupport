@@ -93,3 +93,52 @@ async def test_ask_employee_pauses_then_resumes_to_resolution(graph, provider, o
         event_types = {e.event_type for e in events}
     assert {"SESSION_STARTED", "SUPERVISOR_DECISION", "AGENT_STARTED", "AGENT_COMPLETED",
             "TICKET_CREATED", "SESSION_COMPLETED"} <= event_types
+
+
+async def test_physical_damage_reply_stops_an_endpoint_reinterview(graph, provider, org_stub):
+    """A clear work-blocking display failure must never lead to another
+    paraphrased question about replacement or repair."""
+    provider.enqueue(
+        supervisor_decision(
+            decision="ask_employee",
+            target_specialist=None,
+            category="other",
+            intent="device request",
+            question_for_employee="What is wrong with your current laptop?",
+        ),
+    )
+    first = await dispatcher.start_session("EMP-032", "I need a new laptop.")
+
+    provider.enqueue(
+        supervisor_decision(
+            target_specialist="endpoint", category="endpoint", intent="physical device damage"
+        ),
+        specialist_finish(
+            agent="endpoint",
+            outcome="need_more_information",
+            resolution_summary=None,
+            question_for_employee="Can you describe the screen issue in more detail?",
+        ),
+    )
+    result = await dispatcher.continue_session(
+        first["session_id"],
+        "EMP-032",
+        "The screen is broken, only shows lines, and I cannot work.",
+    )
+
+    assert result["terminal_status"] == "escalated"
+    assert "Platform Manager, Platform & IT Manager" in (result["final_response"] or "")
+    # No additional model call was made to ask the endpoint's repeat question.
+    assert len(provider.calls) == 3
+
+    async with db_session() as session:
+        messages = (await session.scalars(
+            select(Message)
+            .where(Message.session_id == first["session_id"], Message.role == "assistant")
+            .order_by(Message.created_at)
+        )).all()
+        events = (await session.scalars(
+            select(AuditEvent).where(AuditEvent.session_id == first["session_id"])
+        )).all()
+    assert all("screen issue in more detail" not in message.content for message in messages)
+    assert any(event.event_type == "HUMAN_INTERVENTION" for event in events)

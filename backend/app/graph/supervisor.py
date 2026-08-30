@@ -67,6 +67,28 @@ async def supervisor_node(state: SupportState) -> Command:
             trigger="budget_exhausted", cycle=cycle, extra={"loop_guard_triggered": True},
         )
 
+    # Endpoint Support has already had a chance to assess the case. Once an
+    # employee has clearly reported physical display damage that prevents work,
+    # additional wording variants cannot decide repair versus replacement.
+    # Stop the re-interview and hand the case to the hardware owner.
+    if guards.endpoint_damage_requires_hardware_handoff(state):
+        reason = (
+            "The employee has reported physical display damage that prevents normal work; "
+            "a human hardware assessment is required for repair or replacement."
+        )
+        await record(
+            EventType.HUMAN_INTERVENTION,
+            session_id=state.session_id,
+            actor="supervisor",
+            payload={"reason": reason, "trigger": "physical_device_damage"},
+        )
+        return _escalate(
+            state,
+            reason=reason,
+            trigger="agent_recommendation",
+            cycle=cycle,
+        )
+
     run = await repos.create_agent_run(state.session_id, "supervisor", run_index=cycle)
     provider = get_provider()
     outcome = await invoke_structured(
@@ -117,6 +139,40 @@ async def supervisor_node(state: SupportState) -> Command:
         normalized["autonomy_level"] = "human_only"
     decision = decision.model_copy(update=normalized)
     overrides: list[str] = []
+
+    # Information requests are bounded across the *whole session*, not merely
+    # a single LangGraph invocation. This makes a rephrased version of an
+    # already answered question a safe escalation instead of an endless chat.
+    if decision.decision == "ask_employee":
+        question_verdict = guards.check_information_request(
+            state, decision.question_for_employee or ""
+        )
+        if question_verdict.tripped:
+            await record(
+                EventType.LOOP_GUARD_TRIGGERED,
+                session_id=state.session_id,
+                actor="supervisor",
+                payload={
+                    "kind": question_verdict.kind,
+                    "reason": question_verdict.reason,
+                    "question": decision.question_for_employee,
+                },
+            )
+            await repos.complete_agent_run(
+                run.id,
+                status="completed",
+                outcome="information_guard",
+                loop_guard_triggered=True,
+                result=decision.model_dump(mode="json"),
+                structured_output_retries=outcome.retries,
+            )
+            return _escalate(
+                state,
+                reason=question_verdict.reason or "follow-up questions are no longer advancing the case",
+                trigger="loop_guard",
+                cycle=cycle,
+                extra={"loop_guard_triggered": True},
+            )
 
     # A specialist that has exhausted its schema retries cannot safely make
     # progress on another invocation. Preserve the evidence and hand the case

@@ -157,6 +157,30 @@ class ScriptedProvider:
                     ),
                     reason="security needs the employee's exposure details before continuing",
                 )
+            if '"agent": "network"' in text:
+                has_network_detail = any(
+                    phrase in employee_text
+                    for phrase in (
+                        "disconnect", "drop", "cannot connect", "can't connect", "unable to connect",
+                        "error", "timeout", "connected but", "internal site", "internal service",
+                    )
+                )
+                if has_network_detail:
+                    return decision(
+                        target_specialist="network", category="network", risk_level="medium",
+                        intent="VPN connectivity diagnosis",
+                        reason="the employee supplied the connection symptom needed for diagnostics",
+                    )
+                return decision(
+                    decision="ask_employee", category="network", risk_level="medium",
+                    intent="VPN connectivity diagnosis",
+                    question_for_employee=(
+                        "Sorry you're blocked. Is the VPN failing to connect, dropping after it "
+                        "connects, or connected but unable to reach an internal service? Please "
+                        "share any error text you see."
+                    ),
+                    reason="network diagnostics need the connection failure mode",
+                )
             return decision(
                 decision="ask_employee",
                 question_for_employee="Could you share the missing detail so I can continue investigating?",
@@ -269,11 +293,43 @@ class ScriptedProvider:
         observed = "your tool observations this run" in text
 
         if agent == "network":
+            employee_text = _employee_text(messages)
+            observations = _obs_text(messages)
+            has_network_detail = any(
+                phrase in employee_text
+                for phrase in (
+                    "disconnect", "drop", "cannot connect", "can't connect", "unable to connect",
+                    "error", "timeout", "connected but", "internal site", "internal service",
+                )
+            )
+            if not has_network_detail:
+                return finish(
+                    agent="network",
+                    outcome="need_more_information",
+                    findings=[{
+                        "agent": "network",
+                        "summary": "Employee reported that VPN access is not working, but the connection failure mode is not yet known",
+                        "severity": "low",
+                        "tags": ["vpn"],
+                        "detail": "",
+                    }],
+                    question_for_employee=(
+                        "Sorry you're blocked. Is the VPN failing to connect, dropping after it "
+                        "connects, or connected but unable to reach an internal service? Please "
+                        "share any error text you see."
+                    ),
+                    reasoning_summary=(
+                        "The reported VPN problem needs one discriminating symptom before "
+                        "diagnostics can distinguish connection, stability, and access paths."
+                    ),
+                )
             if "[check_vpn_status]" not in text:
                 return call("check_vpn_status")
             if "[inspect_recent_vpn_session]" not in text:
                 return call("inspect_recent_vpn_session")
-            if "flagged" in text and ("203.0.113.42" in text or "unrecognized" in text):
+            if "flagged" in observations and (
+                "203.0.113.42" in observations or "unrecognized" in observations
+            ):
                 return finish(
                     agent="network",
                     outcome="handoff_recommended",
@@ -296,12 +352,13 @@ class ScriptedProvider:
             return finish(
                 agent="network",
                 outcome="resolved",
-                findings=[{"agent": "network", "summary": "VPN and connectivity diagnostics show no ongoing fault", "severity": "low", "tags": ["vpn"], "detail": ""}],
+                findings=[{"agent": "network", "summary": "VPN and connectivity diagnostics do not show an active fault at the time of the check", "severity": "low", "tags": ["vpn"], "detail": ""}],
                 resolution_summary=(
-                    "Your VPN and connection look healthy now. If it drops again, try switching "
-                    "networks briefly and reconnecting — and let me know if it persists."
+                    "I couldn't reproduce a VPN fault during this check, although that doesn't "
+                    "invalidate what you experienced. If it happens again, note the time and any "
+                    "error message, then reconnect once and send those details so we can compare them."
                 ),
-                reasoning_summary="Diagnostics returned healthy results; no anomaly observed.",
+                reasoning_summary="Diagnostics did not reproduce the reported issue, so the next step preserves the employee's symptom for targeted follow-up.",
             )
 
         if agent == "security":
@@ -443,12 +500,17 @@ class ScriptedProvider:
             )
 
         # identity (default)
+        employee_text = _employee_text(messages)
+        observations = _obs_text(messages)
+        account_is_locked = "locked" in employee_text or "account for" in observations and " is locked" in observations
         if "[get_account_status]" not in text:
             return call("get_account_status")
-        if "locked" in text:
+        if account_is_locked:
             if "[get_recent_auth_events]" not in text:
                 return call("get_recent_auth_events")
-            if "unusual" in text and "unusual_count=0" not in text and "no unusual" not in text and ("impossible" in text or "203.0.113.42" in text):
+            if "flagged as unusual" in observations and not "0 flagged as unusual" in observations and (
+                "impossible" in observations or "203.0.113.42" in observations
+            ):
                 return finish(
                     agent="identity",
                     outcome="handoff_recommended",

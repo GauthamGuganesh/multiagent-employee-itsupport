@@ -99,6 +99,10 @@ class SupportState(BaseModel):
 
     # --- interaction ---
     pending_question: str | None = None
+    # This is deliberately session-lifetime, unlike per-turn execution
+    # budgets. A new employee reply must not let the system interview them
+    # indefinitely with differently worded versions of the same question.
+    information_request_count: int = 0
 
     # --- terminal ---
     terminal_status: TerminalStatus | None = None
