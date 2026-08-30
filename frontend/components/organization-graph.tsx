@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import { useMemo, useRef, useState, type PointerEvent } from "react";
 
 import type { OrgGraph } from "@/lib/types";
 import { Button, cx } from "@/components/ui";
@@ -107,7 +107,8 @@ export function OrganizationGraph({
   const layout = useMemo(() => buildLayout(employees), [employees]);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [offset, setOffset] = useState(() => initialView(layout));
-  const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const drag = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null);
+  const suppressNodeClick = useRef(false);
 
   const focused = focusedEmployeeIds !== null;
   const hasResults = !focused || focusedEmployeeIds.size > 0;
@@ -121,15 +122,9 @@ export function OrganizationGraph({
     setOffset(initialView(layout));
   }
 
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const scale = event.deltaY < 0 ? 0.08 : -0.08;
-    changeZoom(scale);
-  }
-
   function beginPan(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
-    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
@@ -137,12 +132,18 @@ export function OrganizationGraph({
     if (!drag.current || drag.current.pointerId !== event.pointerId) return;
     const x = event.clientX;
     const y = event.clientY;
-    setOffset((current) => ({ x: current.x + x - drag.current!.x, y: current.y + y - drag.current!.y }));
-    drag.current = { pointerId: event.pointerId, x, y };
+    const deltaX = x - drag.current.x;
+    const deltaY = y - drag.current.y;
+    if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) drag.current.moved = true;
+    setOffset((current) => ({ x: current.x + deltaX, y: current.y + deltaY }));
+    drag.current = { ...drag.current, x, y };
   }
 
   function endPan(event: PointerEvent<HTMLDivElement>) {
-    if (drag.current?.pointerId === event.pointerId) drag.current = null;
+    if (drag.current?.pointerId === event.pointerId) {
+      suppressNodeClick.current = drag.current.moved;
+      drag.current = null;
+    }
   }
 
   return (
@@ -153,7 +154,6 @@ export function OrganizationGraph({
         onPointerMove={pan}
         onPointerUp={endPan}
         onPointerCancel={endPan}
-        onWheel={handleWheel}
         aria-label="Interactive organization reporting graph. Drag to pan and use the zoom controls to inspect people."
         role="application"
       >
@@ -207,6 +207,11 @@ export function OrganizationGraph({
                 tabIndex={0}
                 aria-label={`Open ${employee.name}, ${employee.title}`}
                 onClick={(event) => {
+                  if (suppressNodeClick.current) {
+                    suppressNodeClick.current = false;
+                    event.preventDefault();
+                    return;
+                  }
                   event.stopPropagation();
                   onEmployeeSelect(employee.id);
                 }}
@@ -281,7 +286,7 @@ export function OrganizationGraph({
         </Button>
       </div>
       <p className="pointer-events-none absolute bottom-4 right-4 rounded-md bg-surface/85 px-2 py-1 text-xs text-muted shadow-sm backdrop-blur">
-        Drag to pan · scroll to zoom · select a person for details
+        Drag to pan · use − / + to zoom · select a person for details
       </p>
     </div>
   );

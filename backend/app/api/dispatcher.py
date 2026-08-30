@@ -180,6 +180,12 @@ async def continue_session(
     session = await repos.get_support_session(session_id)
     if session is None or session.employee_id != employee_id:
         return {"error": "session not found"}
+    if session.terminal_status:
+        # A completed graph retains the specialist findings from that request.
+        # Re-entering it with an unrelated message would mix two incidents and
+        # is the source of incoherent follow-up responses. Start a fresh
+        # session instead, while preserving this one as an immutable audit.
+        return {"error": "this request is complete; start a new request for another issue", "status_code": 409}
 
     text = payload if isinstance(payload, str) else ("yes" if payload else "no")
     await repos.add_message(session_id, "employee", text, source=channel)

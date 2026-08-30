@@ -35,7 +35,7 @@ async def send_message(
 ):
     result = await dispatcher.continue_session(session_id, employee_id, body.message.strip(), channel="web")
     if result.get("error"):
-        raise HTTPException(status_code=404, detail=result["error"])
+        raise HTTPException(status_code=result.get("status_code", 404), detail=result["error"])
     return result
 
 
@@ -45,7 +45,7 @@ async def confirm(
 ):
     result = await dispatcher.continue_session(session_id, employee_id, body.confirmed, channel="web")
     if result.get("error"):
-        raise HTTPException(status_code=404, detail=result["error"])
+        raise HTTPException(status_code=result.get("status_code", 404), detail=result["error"])
     return result
 
 

@@ -109,6 +109,7 @@ class ScriptedProvider:
         security_escalated = '"agent": "security"' in text and '"outcome": "escalation_required"' in text
         any_result = '"outcome":' in text
         handoff_to_security = '"outcome": "handoff_recommended"' in text and '"target_agent": "security"' in text
+        needs_information = '"outcome": "need_more_information"' in text
         resolved = '"outcome": "resolved"' in text
         unable = '"outcome": "unable_to_resolve"' in text
 
@@ -134,10 +135,40 @@ class ScriptedProvider:
                 intent="suspicious activity found during network diagnostics",
                 reason="honoring the network specialist's handoff recommendation",
             )
+        if needs_information:
+            employee_text = _employee_text(messages)
+            if "phishing-report" in text:
+                has_phishing_detail = any(
+                    phrase in employee_text
+                    for phrase in ("clicked", "opened", "sender", "subject", "link", "attachment")
+                )
+                if has_phishing_detail:
+                    return decision(
+                        target_specialist="security", category="security", risk_level="high",
+                        autonomy_level="human_only", intent="possible phishing exposure",
+                        reason="employee supplied the phishing details requested by security",
+                    )
+                return decision(
+                    decision="ask_employee", category="security", risk_level="high",
+                    autonomy_level="human_only", intent="possible phishing exposure",
+                    question_for_employee=(
+                        "Thanks for flagging this. Please don't open any links or attachments. "
+                        "Did you click or open anything, and can you share the sender or subject line?"
+                    ),
+                    reason="security needs the employee's exposure details before continuing",
+                )
+            return decision(
+                decision="ask_employee",
+                question_for_employee="Could you share the missing detail so I can continue investigating?",
+                reason="the specialist needs one more employee detail",
+            )
         if resolved:
             return decision(
                 decision="run_workflow", workflow="resolution",
-                category="endpoint" if ("slow" in text or "disk" in text) else "network",
+                # Preserve the category selected by the active specialist. A
+                # follow-up may mention a laptop or a previous symptom without
+                # changing the domain that actually resolved the request.
+                category="other",
                 intent="issue diagnosed and resolved",
                 reason="specialist resolved the issue; closing out",
             )
@@ -161,6 +192,12 @@ class ScriptedProvider:
                 intent="ticket status inquiry", autonomy_level="auto_resolve",
                 reason="the employee is asking about an existing request",
             )
+        if "phishing" in text or "suspicious" in text or "hacked" in text or "compromise" in text or "malware" in text:
+            return decision(
+                target_specialist="security", category="security", risk_level="high",
+                autonomy_level="human_only", intent="possible security incident",
+                reason="possible security incident reported by the employee",
+            )
         if "vpn" in text or "wifi" in text or "wi-fi" in text or "internet" in text or "network" in text:
             return decision(
                 target_specialist="network", category="network", risk_level="medium",
@@ -179,17 +216,11 @@ class ScriptedProvider:
                 intent="software installation request",
                 reason="software installation is an endpoint action",
             )
-        if "slow" in text or "disk" in text or "laptop" in text or "device" in text or "crash" in text:
+        if "slow" in text or "disk" in text or "laptop" in text or "device" in text or "crash" in text or "screen" in text or "display" in text:
             return decision(
                 target_specialist="endpoint", category="endpoint", risk_level="low",
                 intent="device performance problem",
                 reason="dominant symptom is device health",
-            )
-        if "phishing" in text or "suspicious" in text or "hacked" in text or "compromise" in text:
-            return decision(
-                target_specialist="security", category="security", risk_level="high",
-                autonomy_level="human_only", intent="possible security incident",
-                reason="possible security incident reported by the employee",
             )
         return decision(
             decision="ask_employee", category="other",
@@ -274,26 +305,98 @@ class ScriptedProvider:
             )
 
         if agent == "security":
+            employee_text = _employee_text(messages)
+            reported_phishing = any(
+                phrase in employee_text
+                for phrase in ("phishing", "suspicious mail", "suspicious email", "weird email")
+            )
+            supplied_phishing_detail = any(
+                phrase in employee_text
+                for phrase in ("clicked", "opened", "sender", "subject", "link", "attachment")
+            )
+            if reported_phishing and not supplied_phishing_detail:
+                return finish(
+                    agent="security",
+                    outcome="need_more_information",
+                    findings=[{
+                        "agent": "security",
+                        "summary": "Employee reported a suspicious email; interaction with it has not yet been confirmed",
+                        "severity": "medium",
+                        "tags": ["phishing-report"],
+                        "detail": "",
+                    }],
+                    question_for_employee=(
+                        "Thanks for flagging this. Please don't open any links or attachments. "
+                        "Did you click or open anything, and can you share the sender or subject line?"
+                    ),
+                    reasoning_summary=(
+                        "A phishing report needs immediate safe handling and a small amount of "
+                        "context before assessing possible exposure."
+                    ),
+                )
             if "[get_recent_security_events]" not in text:
                 return call("get_recent_security_events")
             if "[notify_security_team]" not in text:
-                return call("notify_security_team", summary=f"Possible account compromise indicators for {employee}")
+                return call("notify_security_team", summary=f"Security review requested after suspicious activity reported by {employee}")
+            has_high_events = "highest severity is high" in text or "highest severity is critical" in text
             return finish(
                 agent="security",
                 outcome="escalation_required",
                 findings=[
-                    {"agent": "security", "summary": "Impossible-travel sign-in and a new MFA device were recorded recently", "severity": "high", "tags": ["auth"], "detail": ""},
+                    {
+                        "agent": "security",
+                        "summary": (
+                            "Security events include high-severity account indicators"
+                            if has_high_events
+                            else "Employee-reported suspicious activity has been passed to the security team for review"
+                        ),
+                        "severity": "high" if has_high_events else "medium",
+                        "tags": ["security-review"],
+                        "detail": "",
+                    },
                 ],
                 escalation_reason=(
-                    "Indicators of possible account compromise (impossible travel, new MFA "
-                    "device, unrecognized IP) require human security review"
+                    "Reported suspicious activity requires human security review"
+                    if not has_high_events
+                    else "High-severity account indicators require human security review"
                 ),
                 confidence=0.9,
-                reasoning_summary="High-severity indicators corroborate the network findings; containment decisions belong with the security team.",
+                reasoning_summary=(
+                    "The security team was notified so it can assess the report and decide whether containment is needed."
+                    if not has_high_events
+                    else "High-severity indicators need human containment decisions."
+                ),
             )
 
         if agent == "endpoint":
             asked = _employee_text(messages)
+            physical_damage = any(
+                phrase in asked
+                for phrase in ("screen", "display", "damaged", "damage", "cracked", "replacement")
+            )
+            unable_to_work = any(
+                phrase in asked
+                for phrase in ("cannot work", "can't work", "unable to work", "not able to work")
+            )
+            if physical_damage:
+                impact = " and is preventing normal work" if unable_to_work else ""
+                return finish(
+                    agent="endpoint",
+                    outcome="escalation_required",
+                    findings=[{
+                        "agent": "endpoint",
+                        "summary": f"Employee reports physical display damage{impact}",
+                        "severity": "medium",
+                        "tags": ["hardware", "display"],
+                        "detail": "",
+                    }],
+                    escalation_reason=(
+                        "Physical device damage needs an IT hardware assessment before a repair or replacement can be arranged"
+                    ),
+                    reasoning_summary=(
+                        "Remote diagnostics cannot safely assess physical display damage; a hardware owner must determine the repair or replacement path."
+                    ),
+                )
             wants_install = "install" in asked or "docker" in asked
             if wants_install:
                 software = "Docker Desktop" if "docker" in asked else "the requested software"

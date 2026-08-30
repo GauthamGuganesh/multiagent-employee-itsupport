@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 630" role="img" aria-labelledby="title desc">
+  <title id="title">GA-VoiceAI architecture</title>
+  <desc id="desc">Employees interact through web chat or voice. FastAPI dispatches to a LangGraph supervisor which orchestrates identity, endpoint, network, and security specialists. Deterministic workflows persist to PostgreSQL, consult hosted Neo4j, and selectively use Mem0. The command center consumes persisted events.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity=".10"/>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6.5" refY="3.5" orient="auto">
+      <path d="M0 0 7 3.5 0 7z" fill="#64748b"/>
+    </marker>
+    <style>
+      .title { font: 700 28px Inter, Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 14px Inter, Arial, sans-serif; fill: #64748b; }
+      .label { font: 700 15px Inter, Arial, sans-serif; fill: #0f172a; }
+      .detail { font: 400 12px Inter, Arial, sans-serif; fill: #475569; }
+      .pill { font: 700 11px Inter, Arial, sans-serif; fill: #fff; letter-spacing: .05em; }
+      .line { stroke: #64748b; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #8b5cf6; stroke-width: 2; fill: none; stroke-dasharray: 6 5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="1280" height="630" rx="28" fill="url(#background)"/>
+  <text x="56" y="62" class="title">GA-VoiceAI — safe, observable multi-agent IT support</text>
+  <text x="56" y="88" class="subtitle">One conversation. Bounded specialist investigation. Deterministic action and human handoff.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="56" y="184" width="186" height="130" rx="16" fill="#fff" stroke="#cbd5e1"/>
+    <rect x="72" y="201" width="88" height="22" rx="11" fill="#4f46e5"/>
+    <text x="87" y="216" class="pill">EMPLOYEE</text>
+    <text x="72" y="252" class="label">Web chat + voice</text>
+    <text x="72" y="276" class="detail">Authenticated employee</text>
+    <text x="72" y="294" class="detail">One support session</text>
+
+    <rect x="304" y="164" width="218" height="168" rx="16" fill="#fff" stroke="#a5b4fc"/>
+    <rect x="320" y="181" width="122" height="22" rx="11" fill="#4f46e5"/>
+    <text x="335" y="196" class="pill">FASTAPI</text>
+    <text x="320" y="232" class="label">Session dispatcher</text>
+    <text x="320" y="256" class="detail">Web + voice enter here</text>
+    <text x="320" y="274" class="detail">Resume, serialize, persist</text>
+    <text x="320" y="292" class="detail">SSE event stream</text>
+
+    <rect x="586" y="132" width="258" height="232" rx="18" fill="#111827" stroke="#312e81"/>
+    <rect x="604" y="151" width="118" height="22" rx="11" fill="#7c3aed"/>
+    <text x="620" y="166" class="pill">LANGGRAPH</text>
+    <text x="604" y="206" class="label" fill="#f8fafc">Supervisor</text>
+    <text x="604" y="230" class="detail" fill="#cbd5e1">One incremental decision</text>
+    <rect x="604" y="252" width="102" height="32" rx="8" fill="#312e81"/>
+    <text x="621" y="273" class="detail" fill="#e0e7ff">Identity</text>
+    <rect x="718" y="252" width="108" height="32" rx="8" fill="#312e81"/>
+    <text x="734" y="273" class="detail" fill="#e0e7ff">Endpoint</text>
+    <rect x="604" y="296" width="102" height="32" rx="8" fill="#312e81"/>
+    <text x="623" y="317" class="detail" fill="#e0e7ff">Network</text>
+    <rect x="718" y="296" width="108" height="32" rx="8" fill="#312e81"/>
+    <text x="738" y="317" class="detail" fill="#e0e7ff">Security</text>
+
+    <rect x="908" y="164" width="292" height="168" rx="16" fill="#fff" stroke="#a5b4fc"/>
+    <rect x="924" y="181" width="148" height="22" rx="11" fill="#0f766e"/>
+    <text x="939" y="196" class="pill">WORKFLOWS</text>
+    <text x="924" y="232" class="label">Deterministic process</text>
+    <text x="924" y="256" class="detail">Confirm · approve · execute</text>
+    <text x="924" y="274" class="detail">Resolve · escalate · notify</text>
+    <text x="924" y="292" class="detail">Safe human fallback</text>
+
+    <rect x="244" y="430" width="242" height="138" rx="16" fill="#eff6ff" stroke="#60a5fa"/>
+    <text x="264" y="470" class="label">PostgreSQL</text>
+    <text x="264" y="494" class="detail">Sessions · tickets · approvals</text>
+    <text x="264" y="512" class="detail">Agent/tool runs · audit events</text>
+    <text x="264" y="530" class="detail">Persist before broadcast</text>
+
+    <rect x="520" y="430" width="242" height="138" rx="16" fill="#f0fdf4" stroke="#4ade80"/>
+    <text x="540" y="470" class="label">Hosted Neo4j</text>
+    <text x="540" y="494" class="detail">Employees · teams · privileges</text>
+    <text x="540" y="512" class="detail">Approvers · owners · escalation</text>
+    <text x="540" y="530" class="detail">Parameterized graph tools</text>
+
+    <rect x="796" y="430" width="188" height="138" rx="16" fill="#faf5ff" stroke="#c084fc"/>
+    <text x="816" y="470" class="label">Mem0</text>
+    <text x="816" y="494" class="detail">Selective context</text>
+    <text x="816" y="512" class="detail">Never authority</text>
+
+    <rect x="1030" y="430" width="170" height="138" rx="16" fill="#fff7ed" stroke="#fb923c"/>
+    <text x="1050" y="470" class="label">Ops console</text>
+    <text x="1050" y="494" class="detail">Live timelines</text>
+    <text x="1050" y="512" class="detail">Tickets + audit</text>
+  </g>
+
+  <path d="M242 249 H294" class="line"/>
+  <path d="M522 249 H576" class="line"/>
+  <path d="M844 249 H898" class="line"/>
+  <path d="M1054 332 V398 H366 V420" class="line"/>
+  <path d="M1054 332 V398 H641 V420" class="line"/>
+  <path d="M715 364 V420" class="dash"/>
+  <path d="M486 499 H1020" class="line"/>
+  <text x="883" y="412" class="subtitle">SSE</text>
+</svg>
