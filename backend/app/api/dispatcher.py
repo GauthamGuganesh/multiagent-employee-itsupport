@@ -140,12 +140,18 @@ async def _fail_safe(session_id: str, employee_id: str, error: Exception) -> dic
     }
 
 
-async def start_session(employee_id: str, text: str, channel: str = "web") -> dict[str, Any]:
+async def start_session(
+    employee_id: str,
+    text: str,
+    channel: str = "web",
+    voice_bridge_key: str | None = None,
+) -> dict[str, Any]:
     session = await repos.create_support_session(
         employee_id=employee_id,
         channel=channel,
         original_request=text,
         langgraph_thread_id="",  # thread id == session id
+        voice_bridge_key=voice_bridge_key,
     )
     await repos.update_support_session(session.id, langgraph_thread_id=session.id)
     await record(

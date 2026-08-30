@@ -6,6 +6,7 @@ session dispatcher through a webhook tool, so voice and text share one
 pipeline. Voice confirms INTENT only — identity comes from the authenticated
 web session that requested the signed URL.
 """
+import hashlib
 import json
 import time
 from collections.abc import AsyncIterator
@@ -18,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api import dispatcher
 from app.api.deps import get_current_employee
+from app.db import repos
 from app.config import get_settings
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
@@ -46,6 +48,26 @@ def resolve_bridge_token(token: str) -> str:
     if not isinstance(employee_id, str):
         raise HTTPException(status_code=401, detail="invalid voice bridge token")
     return employee_id
+
+
+def _voice_bridge_key(token: str) -> str:
+    """A non-reversible lookup key; the bearer token itself is never stored."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+async def _resume_voice_session(
+    employee_id: str, message: str, voice_bridge_token: str, session_id: str | None = None
+) -> dict:
+    """Resume the one open support request for this authenticated voice call."""
+    if session_id:
+        return await dispatcher.continue_session(session_id, employee_id, message, channel="voice")
+    bridge_key = _voice_bridge_key(voice_bridge_token)
+    existing = await repos.find_active_voice_session(employee_id, bridge_key)
+    if existing is not None:
+        return await dispatcher.continue_session(existing.id, employee_id, message, channel="voice")
+    return await dispatcher.start_session(
+        employee_id, message, channel="voice", voice_bridge_key=bridge_key
+    )
 
 
 @router.get("/config")
@@ -113,12 +135,9 @@ class AgentToolRequest(BaseModel):
 @router.post("/agent-tool")
 async def agent_tool(body: AgentToolRequest):
     employee_id = resolve_bridge_token(body.voice_bridge_token)
-    if body.session_id:
-        result = await dispatcher.continue_session(
-            body.session_id, body.employee_id, body.message, channel="voice"
-        )
-    else:
-        result = await dispatcher.start_session(body.employee_id, body.message, channel="voice")
+    result = await _resume_voice_session(
+        employee_id, body.message, body.voice_bridge_token, body.session_id
+    )
     return {"session_id": result.get("session_id"), "response": _voice_response_text(result)}
 
 
@@ -244,10 +263,14 @@ async def custom_llm_completion(
     _check_custom_llm_key(authorization)
     employee_id, session_id = _bridge_context(body, voice_bridge_token_header)
     message = _latest_employee_message(body.messages)
-    if session_id:
-        result = await dispatcher.continue_session(session_id, employee_id, message, channel="voice")
-    else:
-        result = await dispatcher.start_session(employee_id, message, channel="voice")
+    token = (
+        body.voice_bridge_token
+        or (body.elevenlabs_extra_body.voice_bridge_token if body.elevenlabs_extra_body else None)
+        or voice_bridge_token_header
+    )
+    # _bridge_context validates this is present before returning employee_id.
+    assert token is not None
+    result = await _resume_voice_session(employee_id, message, token, session_id)
     response_text = _voice_response_text(result)
     created = int(time.time())
     support_session_id = result.get("session_id")

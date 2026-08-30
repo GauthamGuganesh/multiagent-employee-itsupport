@@ -1,7 +1,7 @@
 "use client";
 
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
 import { Button, Spinner } from "@/components/ui";
@@ -11,7 +11,11 @@ type VoiceBootstrap = {
   dynamic_variables: Record<string, string>;
 };
 
-function VoiceSession() {
+type VoiceControlProps = {
+  onActivityChange?: (active: boolean) => void;
+};
+
+function VoiceSession({ onActivityChange }: VoiceControlProps) {
   const { startSession, endSession, status, isListening, isSpeaking } = useConversation({
     onError: () => undefined,
   });
@@ -19,6 +23,10 @@ function VoiceSession() {
 
   const active = status === "connected" || status === "connecting";
   const label = isSpeaking ? "Speaking…" : isListening ? "Listening…" : active ? "Connected" : "Voice";
+
+  useEffect(() => {
+    onActivityChange?.(active);
+  }, [active, onActivityChange]);
 
   async function toggleVoice() {
     setError(null);
@@ -56,10 +64,10 @@ function VoiceSession() {
   );
 }
 
-export function VoiceControl() {
+export function VoiceControl({ onActivityChange }: VoiceControlProps) {
   return (
     <ConversationProvider>
-      <VoiceSession />
+      <VoiceSession onActivityChange={onActivityChange} />
     </ConversationProvider>
   );
 }

@@ -9,7 +9,7 @@ import { VoiceControl } from "@/components/voice-control";
 import { Badge, Button, Card, Spinner } from "@/components/ui";
 import { api, isAuthError } from "@/lib/api";
 import { useSessionProgress } from "@/lib/sse";
-import type { ChatMessage, ChatResult, PendingInteraction, SessionDetail } from "@/lib/types";
+import type { ChatMessage, ChatResult, PendingInteraction, SessionDetail, SessionSummary } from "@/lib/types";
 
 const EXAMPLES = [
   "My VPN keeps disconnecting.",
@@ -49,6 +49,8 @@ export default function SupportPage() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceStartedAt, setVoiceStartedAt] = useState<number | null>(null);
   useSessionProgress(sessionId, setProgress);
 
   const loadSession = useCallback(async (id: string) => {
@@ -62,6 +64,45 @@ export default function SupportPage() {
     const timer = window.setTimeout(() => void loadSession(sessionId), 0);
     return () => window.clearTimeout(timer);
   }, [loadSession, sessionId]);
+
+  // The Custom LLM creates the voice session server-side. Refreshing that
+  // persisted source of truth keeps speech, chat, and the audit trail aligned.
+  useEffect(() => {
+    if (!voiceActive || !voiceStartedAt) return;
+    let cancelled = false;
+    const syncVoiceTranscript = async () => {
+      try {
+        const data = await api.get<{ sessions: SessionSummary[] }>("/api/chat/sessions");
+        const voiceSession = data.sessions.find(
+          (item) => item.channel === "voice" && Date.parse(item.created_at) >= voiceStartedAt - 15_000,
+        );
+        if (!voiceSession || cancelled) return;
+        if (voiceSession.id !== sessionId) {
+          setSessionId(voiceSession.id);
+          setProgress("Voice conversation connected — transcript is syncing.");
+        }
+        await loadSession(voiceSession.id);
+      } catch (cause) {
+        if (!cancelled && !isAuthError(cause)) {
+          setError("We couldn’t sync the voice transcript. You can still continue by text.");
+        }
+      }
+    };
+    void syncVoiceTranscript();
+    const timer = window.setInterval(() => void syncVoiceTranscript(), 1_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loadSession, sessionId, voiceActive, voiceStartedAt]);
+
+  const handleVoiceActivityChange = useCallback((active: boolean) => {
+    setVoiceActive(active);
+    if (active) {
+      setVoiceStartedAt(Date.now());
+      setProgress("Connecting your voice conversation…");
+    }
+  }, []);
 
   const send = useCallback(async (text: string, confirmation?: boolean) => {
     const clean = text.trim();
@@ -94,11 +135,11 @@ export default function SupportPage() {
   const greeting = `Hi${me?.profile?.name ? `, ${me.profile.name.split(" ")[0]}` : ""}. What can IT help with?`;
 
   return <><EmployeeHeader employeeName={me?.profile?.name} /><main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-6">
-    <section className="mb-5 flex items-start justify-between gap-4"><div><h1 className="text-xl font-semibold tracking-tight">{greeting}</h1><p className="mt-1 text-sm text-muted">Describe the issue in your own words, or start a voice conversation.</p></div><VoiceControl /></section>
+    <section className="mb-5 flex items-start justify-between gap-4"><div><h1 className="text-xl font-semibold tracking-tight">{greeting}</h1><p className="mt-1 text-sm text-muted">Describe the issue in your own words, or start a voice conversation.</p></div><VoiceControl onActivityChange={handleVoiceActivityChange} /></section>
     <section className="flex min-h-[420px] flex-1 flex-col rounded-2xl border border-border-token bg-surface shadow-sm"><div className="flex-1 space-y-3 p-4 sm:p-6" aria-live="polite">
       {messages.length === 0 ? <div className="flex h-full flex-col justify-center py-10 text-center"><div className="mx-auto max-w-md"><p className="text-sm text-muted">I can help with access, devices, network issues, security concerns, and existing IT requests.</p><div className="mt-5 flex flex-wrap justify-center gap-2">{EXAMPLES.map((example) => <button key={example} type="button" onClick={() => setDraft(example)} className="rounded-full border border-border-token px-3 py-1.5 text-sm text-muted transition-colors hover:border-indigo-300 hover:bg-surface-muted hover:text-foreground">{example}</button>)}</div></div></div> : messages.map((message, index) => <motion.div key={`${message.at}-${index}`} initial={reduceMotion ? false : { opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}><MessageBubble message={message} /></motion.div>)}
       {progress && <div className="flex items-center gap-2 text-sm text-ai">{busy && <Spinner className="h-3.5 w-3.5" />}{progress}</div>}
       {pending?.type === "confirmation" && <PendingCard pending={pending} onConfirm={(value) => void send("", value)} />}{error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
-    </div>{terminalStatus ? <div className="flex items-center justify-between gap-3 border-t border-border-token p-3 sm:p-4"><p className="text-sm text-muted">This request is {terminalStatus === "resolved" ? "complete" : "with the support team"}.</p><Button type="button" variant="secondary" onClick={startNewRequest}>Start a new request</Button></div> : <form onSubmit={submit} className="border-t border-border-token p-3 sm:p-4"><div className="flex items-end gap-2"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={2} disabled={busy || pending?.type === "confirmation"} placeholder={pending?.type === "question" ? "Type your answer…" : "Tell us what’s happening…"} className="min-h-11 flex-1 resize-none rounded-xl border border-border-token bg-surface px-3 py-2 text-sm outline-none placeholder:text-muted focus:ring-2 focus:ring-indigo-400/60 disabled:opacity-50" /><Button type="submit" disabled={busy || !draft.trim() || pending?.type === "confirmation"}>{busy ? <Spinner className="h-3.5 w-3.5 border-white/40 border-t-white" /> : "Send"}</Button></div></form>}
+    </div>{terminalStatus ? <div className="flex items-center justify-between gap-3 border-t border-border-token p-3 sm:p-4"><p className="text-sm text-muted">This request is {terminalStatus === "resolved" ? "complete" : "with the support team"}.</p><Button type="button" variant="secondary" onClick={startNewRequest}>Start a new request</Button></div> : <form onSubmit={submit} className="border-t border-border-token p-3 sm:p-4"><div className="flex items-end gap-2"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={2} disabled={busy || voiceActive || pending?.type === "confirmation"} placeholder={voiceActive ? "Voice conversation is active…" : pending?.type === "question" ? "Type your answer…" : "Tell us what’s happening…"} className="min-h-11 flex-1 resize-none rounded-xl border border-border-token bg-surface px-3 py-2 text-sm outline-none placeholder:text-muted focus:ring-2 focus:ring-indigo-400/60 disabled:opacity-50" /><Button type="submit" disabled={busy || voiceActive || !draft.trim() || pending?.type === "confirmation"}>{busy ? <Spinner className="h-3.5 w-3.5 border-white/40 border-t-white" /> : "Send"}</Button></div></form>}
     </section></main></>;
 }

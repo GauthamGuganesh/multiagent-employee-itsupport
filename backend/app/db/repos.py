@@ -29,11 +29,16 @@ def _now() -> datetime:
 # --- sessions -------------------------------------------------------------
 
 async def create_support_session(
-    employee_id: str, channel: str, original_request: str, langgraph_thread_id: str
+    employee_id: str,
+    channel: str,
+    original_request: str,
+    langgraph_thread_id: str,
+    voice_bridge_key: str | None = None,
 ) -> SupportSession:
     row = SupportSession(
         employee_id=employee_id,
         channel=channel,
+        voice_bridge_key=voice_bridge_key,
         original_request=original_request,
         langgraph_thread_id=langgraph_thread_id,
     )
@@ -55,6 +60,22 @@ async def update_support_session(session_id: str, **fields: Any) -> None:
 async def get_support_session(session_id: str) -> SupportSession | None:
     async with db_session() as s:
         return await s.get(SupportSession, session_id)
+
+
+async def find_active_voice_session(employee_id: str, voice_bridge_key: str) -> SupportSession | None:
+    """Return the open session for one authenticated ElevenLabs connection."""
+    async with db_session() as s:
+        return await s.scalar(
+            select(SupportSession)
+            .where(
+                SupportSession.employee_id == employee_id,
+                SupportSession.channel == "voice",
+                SupportSession.voice_bridge_key == voice_bridge_key,
+                SupportSession.terminal_status.is_(None),
+            )
+            .order_by(SupportSession.updated_at.desc())
+            .limit(1)
+        )
 
 
 async def add_message(session_id: str, role: str, content: str, source: str = "web") -> Message:

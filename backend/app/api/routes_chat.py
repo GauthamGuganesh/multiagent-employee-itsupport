@@ -63,6 +63,7 @@ async def my_sessions(employee_id: str = Depends(get_current_employee)):
         "sessions": [
             {
                 "id": r.id,
+                "channel": r.channel,
                 "status": r.status,
                 "terminal_status": r.terminal_status,
                 "original_request": r.original_request,

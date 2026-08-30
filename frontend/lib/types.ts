@@ -38,6 +38,7 @@ export interface SessionDetail {
 
 export interface SessionSummary {
   id: string;
+  channel: "web" | "voice";
   status: string;
   terminal_status: string | null;
   original_request: string;

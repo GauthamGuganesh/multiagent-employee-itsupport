@@ -31,6 +31,10 @@ class SupportSession(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     employee_id: Mapped[str] = mapped_column(String(16), index=True)
     channel: Mapped[str] = mapped_column(String(8), default="web")
+    # Digest of the short-lived ElevenLabs bridge token.  This lets every
+    # utterance in one authenticated voice connection resume the same support
+    # session without persisting the bearer token itself.
+    voice_bridge_key: Mapped[str | None] = mapped_column(String(64), index=True)
     status: Mapped[str] = mapped_column(String(24), default="active", index=True)
     # Triage snapshot (last-write-wins, mirrors state) so session lists/metrics
     # never need to parse audit payloads.
