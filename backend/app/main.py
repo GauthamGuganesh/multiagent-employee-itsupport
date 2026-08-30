@@ -6,6 +6,7 @@ psycopg async (LangGraph checkpointer) works alongside asyncpg (SQLAlchemy).
 """
 import asyncio
 import contextlib
+import os
 import sys
 from contextlib import asynccontextmanager
 
@@ -102,9 +103,10 @@ def create_app() -> FastAPI:
     app.include_router(voice_router)
     app.include_router(custom_llm_router)
 
-    @app.get("/api/health")
+    @app.get("/health")
+    @app.get("/api/health", include_in_schema=False)
     async def health():
-        return {"ok": True}
+        return {"ok": True, "environment": get_settings().app_env}
 
     return app
 
@@ -115,4 +117,9 @@ if __name__ == "__main__":
     import uvicorn
 
     # Single worker: required by the in-process event bus + per-thread locks.
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, workers=1)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8000")),
+        workers=1,
+    )

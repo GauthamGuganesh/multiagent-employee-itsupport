@@ -12,6 +12,7 @@ from app.api.deps import (
     make_admin_session_cookie,
     make_session_cookie,
 )
+from app.config import get_settings
 from app.org import service as org
 from app.org.client import OrgUnavailableError
 
@@ -28,6 +29,17 @@ class AdminLoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+def _cookie_options() -> dict[str, bool | str | int]:
+    """Cross-origin Vercel → Render requests need an HTTPS cookie in production."""
+    settings = get_settings()
+    return {
+        "httponly": True,
+        "secure": settings.is_production,
+        "samesite": "none" if settings.is_production else "lax",
+        "max_age": 60 * 60 * 12,
+    }
+
+
 @router.post("/login")
 async def login(body: LoginRequest, response: Response):
     employee_id = body.employee_id.strip().upper()
@@ -42,10 +54,7 @@ async def login(body: LoginRequest, response: Response):
             raise HTTPException(status_code=404, detail="unknown employee")
     except OrgUnavailableError:
         profile = None  # directory down: allow demo login, profile resolves later
-    response.set_cookie(
-        COOKIE_NAME, make_session_cookie(employee_id),
-        httponly=True, samesite="lax", max_age=60 * 60 * 12,
-    )
+    response.set_cookie(COOKIE_NAME, make_session_cookie(employee_id), **_cookie_options())
     return {"employee_id": employee_id, "profile": profile}
 
 
@@ -54,13 +63,7 @@ async def admin_login(body: AdminLoginRequest, response: Response):
     username = body.username.strip()
     if not is_valid_admin_credentials(username, body.password):
         raise HTTPException(status_code=401, detail="invalid administrator credentials")
-    response.set_cookie(
-        COOKIE_NAME,
-        make_admin_session_cookie(username),
-        httponly=True,
-        samesite="lax",
-        max_age=60 * 60 * 12,
-    )
+    response.set_cookie(COOKIE_NAME, make_admin_session_cookie(username), **_cookie_options())
     return {"username": username, "role": "administrator"}
 
 
@@ -71,7 +74,10 @@ async def admin_me(username: str = Depends(get_current_administrator)):
 
 @router.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie(COOKIE_NAME)
+    options = _cookie_options()
+    response.delete_cookie(
+        COOKIE_NAME, secure=bool(options["secure"]), samesite=str(options["samesite"])
+    )
     return {"ok": True}
 
 

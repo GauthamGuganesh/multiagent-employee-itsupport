@@ -104,6 +104,7 @@ npm run build
 
 - [System design](docs/DESIGN.md) — contracts, graph topology, data boundaries, execution guards, and acceptance scenarios.
 - [Interactive implementation guide](docs/implementation-guide.html) — a visual, product-to-code walkthrough.
+- [Deployment guide](docs/DEPLOYMENT.md) — Render, Vercel, hosted Neo4j, Postgres, and ElevenLabs configuration.
 - [ElevenLabs voice setup](docs/VOICE_SETUP.md) — signed bridge flow and secure webhook configuration.
 - [Contributor guide](AGENTS.md) — project layout, conventions, and commands.
 

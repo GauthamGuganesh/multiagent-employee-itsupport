@@ -4,10 +4,11 @@ Every limit that bounds autonomous execution lives here as a configurable
 constant. Guards import these values and enforce them in code — prompts never
 carry enforcement responsibility.
 """
+import json
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Repo root .env (two levels up from this file: backend/app/config.py)
@@ -28,19 +29,26 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
 
     # --- Databases ---
-    postgres_dsn: str = "postgresql+asyncpg://itsupport:itsupport@localhost:5433/itsupport"
+    postgres_dsn: str = Field(
+        default="postgresql+asyncpg://itsupport:itsupport@localhost:5433/itsupport",
+        validation_alias=AliasChoices("DATABASE_URL", "IT_POSTGRES_DSN"),
+    )
     # Hosted Neo4j (such as Aura). Values must come from the provider portal;
     # no local Neo4j container is part of this project.
-    neo4j_uri: str = ""
-    neo4j_user: str = ""
-    neo4j_password: str = ""
+    neo4j_uri: str = Field(default="", validation_alias=AliasChoices("NEO4J_URI", "IT_NEO4J_URI"))
+    neo4j_user: str = Field(
+        default="", validation_alias=AliasChoices("NEO4J_USERNAME", "NEO4J_USER", "IT_NEO4J_USER")
+    )
+    neo4j_password: str = Field(
+        default="", validation_alias=AliasChoices("NEO4J_PASSWORD", "IT_NEO4J_PASSWORD")
+    )
     neo4j_database: str = "neo4j"
 
     # --- Cross-session memory ---
     memory_backend: str = "local"  # local | mem0 | off
     memory_store_path: str = "./.memstore"  # local backend storage
     memory_max_retrieved: int = 5
-    mem0_api_key: str = Field(default="", validation_alias="MEM0_API_KEY")
+    mem0_api_key: str = Field(default="", validation_alias=AliasChoices("MEM0_API_KEY", "IT_MEM0_API_KEY"))
 
     # --- Hard execution limits (enforced in code) ---
     max_supervisor_cycles: int = 8
@@ -62,13 +70,49 @@ class Settings(BaseSettings):
     demo_password_prefix: str = "gavoiceai-"
     admin_username: str = "admin"
     admin_password: str = "ga-voiceai-admin"
-    cors_origins: list[str] = ["http://localhost:3000"]
+    app_env: str = Field(default="development", validation_alias=AliasChoices("APP_ENV", "IT_APP_ENV"))
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"],
+        validation_alias=AliasChoices("CORS_ORIGINS", "IT_CORS_ORIGINS"),
+    )
 
     # --- Voice (optional) ---
-    elevenlabs_api_key: str = ""
-    elevenlabs_agent_id: str = ""
+    elevenlabs_api_key: str = Field(
+        default="", validation_alias=AliasChoices("ELEVENLABS_API_KEY", "IT_ELEVENLABS_API_KEY")
+    )
+    elevenlabs_agent_id: str = Field(
+        default="", validation_alias=AliasChoices("ELEVENLABS_AGENT_ID", "IT_ELEVENLABS_AGENT_ID")
+    )
     elevenlabs_custom_llm_key: str = ""
     voice_bridge_token_max_age_seconds: int = 60 * 60
+
+    @field_validator("postgres_dsn", mode="before")
+    @classmethod
+    def _normalize_postgres_url(cls, value: str) -> str:
+        """Accept Render's standard URL while keeping SQLAlchemy async."""
+        if value.startswith("postgres://"):
+            return "postgresql+asyncpg://" + value.removeprefix("postgres://")
+        if value.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + value.removeprefix("postgresql://")
+        return value
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, value: str | list[str]) -> list[str]:
+        """Permit either a JSON array or a comma-separated Render variable."""
+        if isinstance(value, list):
+            return value
+        stripped = value.strip()
+        if stripped.startswith("["):
+            parsed = json.loads(stripped)
+            if not isinstance(parsed, list) or not all(isinstance(origin, str) for origin in parsed):
+                raise ValueError("CORS_ORIGINS must be a list of origin strings")
+            return parsed
+        return [origin.strip() for origin in stripped.split(",") if origin.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() in {"production", "prod"}
 
 
 @lru_cache

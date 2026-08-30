@@ -1,5 +1,12 @@
-/** Typed fetch client. All calls are same-origin (Next rewrites proxy /api to
- * the backend), so the session cookie flows automatically. */
+/** Typed client for FastAPI. NEXT_PUBLIC_API_URL is a public origin only;
+ * secrets always remain on Render. The local fallback is development-only. */
+
+const configuredOrigin = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+const API_ORIGIN = configuredOrigin ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
+
+export function apiUrl(path: string): string {
+  return `${API_ORIGIN}${path}`;
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -8,8 +15,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     ...init,
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
   if (!res.ok) {

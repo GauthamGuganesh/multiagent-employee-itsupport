@@ -3,6 +3,7 @@
 /** EventSource hooks for the two SSE feeds. */
 import { useEffect, useRef } from "react";
 
+import { apiUrl } from "@/lib/api";
 import type { AuditEvent } from "@/lib/types";
 
 /** Employee-facing progress copy for one session. */
@@ -18,7 +19,9 @@ export function useSessionProgress(
 
   useEffect(() => {
     if (!sessionId) return;
-    const source = new EventSource(`/api/stream/session/${sessionId}`);
+    const source = new EventSource(apiUrl(`/api/stream/session/${sessionId}`), {
+      withCredentials: true,
+    });
     source.addEventListener("progress", (e) => {
       try {
         const data = JSON.parse((e as MessageEvent).data);
@@ -40,7 +43,7 @@ export function useOpsEvents(onEvent: (event: AuditEvent) => void) {
   }, [onEvent]);
 
   useEffect(() => {
-    const source = new EventSource(`/api/stream/ops`);
+    const source = new EventSource(apiUrl("/api/stream/ops"), { withCredentials: true });
     source.addEventListener("audit", (e) => {
       try {
         handler.current(JSON.parse((e as MessageEvent).data));

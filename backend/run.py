@@ -5,6 +5,7 @@ selector policy here keeps asyncpg and the Postgres LangGraph checkpointer
 compatible on Windows.
 """
 import asyncio
+import os
 import sys
 
 if sys.platform == "win32":
@@ -13,4 +14,11 @@ if sys.platform == "win32":
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True, workers=1, loop="none")
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8000")),
+        reload=True,
+        workers=1,
+        loop="none",
+    )

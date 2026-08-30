@@ -54,8 +54,7 @@ async def voice_config(_: str = Depends(get_current_employee)):
     return {"enabled": bool(settings.elevenlabs_api_key and settings.elevenlabs_agent_id)}
 
 
-@router.get("/signed-url")
-async def signed_url(employee_id: str = Depends(get_current_employee)):
+async def _issue_voice_token(employee_id: str) -> dict:
     settings = get_settings()
     if not (settings.elevenlabs_api_key and settings.elevenlabs_agent_id):
         raise HTTPException(status_code=503, detail="voice is not configured")
@@ -79,6 +78,17 @@ async def signed_url(employee_id: str = Depends(get_current_employee)):
             "voice_bridge_token": create_bridge_token(employee_id),
         },
     }
+
+
+@router.get("/signed-url")
+async def signed_url(employee_id: str = Depends(get_current_employee)):
+    return await _issue_voice_token(employee_id)
+
+
+@router.get("/token")
+async def voice_token(employee_id: str = Depends(get_current_employee)):
+    """Deployment-friendly alias for the existing signed ElevenLabs session URL."""
+    return await _issue_voice_token(employee_id)
 
 
 class AgentToolRequest(BaseModel):
