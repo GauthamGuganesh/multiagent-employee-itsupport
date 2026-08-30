@@ -2,7 +2,7 @@
 
 /** Shared UI primitives — restrained enterprise system. No decorative-only
  * controls: everything rendered is functional. */
-import { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, useState } from "react";
 
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
@@ -48,6 +48,31 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
         props.className
       )}
     />
+  );
+}
+
+export function PasswordInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <Input {...props} type={visible ? "text" : "password"} className={cx("pr-11", className)} />
+      <button
+        type="button"
+        onClick={() => setVisible((value) => !value)}
+        aria-label={visible ? "Hide password" : "Show password"}
+        aria-pressed={visible}
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4.5 w-4.5" aria-hidden="true">
+          {visible ? (
+            <><path d="M3 3l18 18" /><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" /><path d="M9.9 4.2A10.6 10.6 0 0 1 12 4c5.5 0 9.3 4.4 10 8-.3 1.4-1.1 2.8-2.2 4" /><path d="M6.1 6.1C4.3 7.5 2.9 9.7 2 12c.7 3.6 4.5 8 10 8 1.6 0 3.1-.4 4.3-1.1" /></>
+          ) : (
+            <><path d="M2 12s3.5-8 10-8 10 8 10 8-3.5 8-10 8S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>
+          )}
+        </svg>
+        <span className="sr-only">{visible ? "Hide password" : "Show password"}</span>
+      </button>
+    </div>
   );
 }
 

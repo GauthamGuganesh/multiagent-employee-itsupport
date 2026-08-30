@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { api } from "@/lib/api";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Card, Input, PasswordInput } from "@/components/ui";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -35,7 +35,7 @@ export default function AdminLoginPage() {
         <div className="mt-6"><p className="text-sm font-medium text-primary">GA-VoiceAI</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Operations Command Center</h1><p className="mt-2 text-sm leading-6 text-muted">Administrator access to live sessions, tickets, approvals, escalations, and the audit timeline.</p></div>
         <form className="mt-6 space-y-4" onSubmit={signIn}>
           <label className="block space-y-1.5"><span className="text-sm font-medium">Administrator username</span><Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required /></label>
-          <label className="block space-y-1.5"><span className="text-sm font-medium">Password</span><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus required /></label>
+          <label className="block space-y-1.5"><span className="text-sm font-medium">Password</span><PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus required /></label>
           {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
           <Button className="w-full" disabled={busy || !username || !password}>{busy ? "Signing in…" : "Open Command Center"}</Button>
         </form>

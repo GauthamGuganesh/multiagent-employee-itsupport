@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { api } from "@/lib/api";
-import { Button, Card, Input } from "@/components/ui";
+import { Button, Card, Input, PasswordInput } from "@/components/ui";
 
 const PROFILE_CACHE_KEY = "ga-voiceai.employee-profile";
 
@@ -68,7 +68,7 @@ export default function LoginPage() {
             </label>
             <label className="block space-y-1.5">
               <span className="text-sm font-medium">Password</span>
-              <Input type="password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+              <PasswordInput placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
             </label>
             {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
             <Button className="w-full" disabled={busy || !employeeId.trim() || !password}>{busy ? "Signing in…" : "Continue to IT Support"}</Button>
