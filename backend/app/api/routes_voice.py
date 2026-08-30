@@ -69,13 +69,19 @@ async def _issue_voice_token(employee_id: str) -> dict:
     signed_url_value = resp.json().get("signed_url")
     if not signed_url_value:
         raise HTTPException(status_code=502, detail="ElevenLabs returned no signed URL")
+    bridge_token = create_bridge_token(employee_id)
     return {
         "signed_url": signed_url_value,
         # The frontend passes these only as ElevenLabs dynamic variables. The
         # callback authenticates with the signed bridge token, never the id.
         "dynamic_variables": {
             "employee_id": employee_id,
-            "voice_bridge_token": create_bridge_token(employee_id),
+            "voice_bridge_token": bridge_token,
+            # ElevenLabs keeps `secret__*` dynamic variables out of prompts and
+            # makes them available to configured request headers. The Custom
+            # LLM route uses this header; the webhook tool keeps using the
+            # non-secret body variable above.
+            "secret__voice_bridge_token": bridge_token,
         },
     }
 
@@ -184,9 +190,15 @@ def _latest_employee_message(messages: list[OpenAIMessage]) -> str:
     raise HTTPException(status_code=422, detail="messages must include an employee user message")
 
 
-def _bridge_context(body: OpenAICompletionRequest) -> tuple[str, str | None]:
+def _bridge_context(
+    body: OpenAICompletionRequest, voice_bridge_token_header: str | None
+) -> tuple[str, str | None]:
     extra = body.elevenlabs_extra_body
-    token = body.voice_bridge_token or (extra.voice_bridge_token if extra else None)
+    token = (
+        body.voice_bridge_token
+        or (extra.voice_bridge_token if extra else None)
+        or voice_bridge_token_header
+    )
     session_id = body.session_id or (extra.session_id if extra else None)
     if not token:
         raise HTTPException(status_code=401, detail="voice bridge token is required")
@@ -218,6 +230,9 @@ def _check_custom_llm_key(authorization: str | None) -> None:
 async def custom_llm_completion(
     body: OpenAICompletionRequest,
     authorization: str | None = Header(default=None),
+    voice_bridge_token_header: str | None = Header(
+        default=None, alias="X-Voice-Bridge-Token"
+    ),
 ):
     """Thin OpenAI-compatible bridge from ElevenLabs to the session dispatcher.
 
@@ -227,7 +242,7 @@ async def custom_llm_completion(
     or tool logic.
     """
     _check_custom_llm_key(authorization)
-    employee_id, session_id = _bridge_context(body)
+    employee_id, session_id = _bridge_context(body, voice_bridge_token_header)
     message = _latest_employee_message(body.messages)
     if session_id:
         result = await dispatcher.continue_session(session_id, employee_id, message, channel="voice")

@@ -107,3 +107,20 @@ async def test_custom_llm_adapter_resumes_explicit_support_session(monkeypatch):
     assert calls == [("support-session-7", "EMP-014", "It disconnects after a minute.")]
     assert response["choices"][0]["message"]["content"] == "What error do you see?"
     assert response["ga_voiceai_session_id"] == "support-session-7"
+
+
+@pytest.mark.asyncio
+async def test_custom_llm_adapter_accepts_secret_dynamic_variable_header(monkeypatch):
+    async def start(employee_id: str, message: str, channel: str):
+        assert (employee_id, message, channel) == ("EMP-032", "Help with VPN", "voice")
+        return {"session_id": "session-8", "pending": None, "assistant_message": "Let's check it."}
+
+    monkeypatch.setattr(dispatcher, "start_session", start)
+    response = await custom_llm_completion(
+        OpenAICompletionRequest(
+            messages=[OpenAIMessage(role="user", content="Help with VPN")],
+        ),
+        voice_bridge_token_header=create_bridge_token("EMP-032"),
+    )
+
+    assert response["ga_voiceai_session_id"] == "session-8"

@@ -107,6 +107,10 @@ both use the shared dispatcher. The Custom LLM adapter accepts a signed
 `elevenlabs_extra_body`; it reads only the latest `user` message and resumes
 the persisted session rather than trusting ElevenLabs message history.
 
+In ElevenLabs Custom LLM settings add the dynamic request header
+`X-Voice-Bridge-Token: {{secret__voice_bridge_token}}`. It is returned only by
+the authenticated signed-URL endpoint and is required to identify the employee.
+
 ## 5. Deployment smoke checks
 
 Run these after configuration; ordinary unit tests do not call external production services.

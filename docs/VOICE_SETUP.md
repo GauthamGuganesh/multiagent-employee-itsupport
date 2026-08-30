@@ -58,13 +58,23 @@ https://<temporary-host>/v1/chat/completions
 ```
 
 If `IT_ELEVENLABS_CUSTOM_LLM_KEY` is set, configure a Bearer Authorization
-header with that exact value. Configure the Custom LLM extra body with the
-signed `voice_bridge_token` from the authenticated `/api/voice/signed-url`
-response. Omit `session_id` on the first request; send the GA-VoiceAI support
-session ID returned as `X-GA-VoiceAI-Session-Id` (or
-`ga_voiceai_session_id` for a non-streaming response) on later requests. The
-adapter then resumes the persisted LangGraph session rather than replaying the
-external message history.
+header with that exact value. In the Custom LLM settings, add this dynamic
+request header:
+
+| Header | Value |
+| --- | --- |
+| `X-Voice-Bridge-Token` | `{{secret__voice_bridge_token}}` |
+
+The authenticated `/api/voice/signed-url` response now supplies that secret
+dynamic variable. This is required: a Custom LLM request without it receives
+`401` because the backend cannot map an unauthenticated voice request to an
+employee. You may instead send `voice_bridge_token` in
+`elevenlabs_extra_body`.
+
+Omit `session_id` on the first request; send the GA-VoiceAI support session ID
+returned as `X-GA-VoiceAI-Session-Id` (or `ga_voiceai_session_id` for a
+non-streaming response) on later requests. The adapter then resumes the
+persisted LangGraph session rather than replaying the external message history.
 
 ## Failure behavior
 
