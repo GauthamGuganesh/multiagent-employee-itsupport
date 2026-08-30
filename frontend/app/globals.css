@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Semantic surface tokens — restrained enterprise system.
+   Slate base, indigo primary, emerald success, amber pending, red critical,
+   violet reserved for AI/automation state. */
+:root {
+  --background: #f8fafc;      /* slate-50 */
+  --surface: #ffffff;
+  --surface-muted: #f1f5f9;   /* slate-100 */
+  --border: #e2e8f0;          /* slate-200 */
+  --foreground: #0f172a;      /* slate-900 */
+  --muted: #64748b;           /* slate-500 */
+  --primary: #4f46e5;         /* indigo-600 */
+  --primary-hover: #4338ca;   /* indigo-700 */
+  --ai: #7c3aed;              /* violet-600 */
+}
+
+.dark {
+  --background: #0b1120;
+  --surface: #101828;
+  --surface-muted: #182236;
+  --border: #23304a;
+  --foreground: #e2e8f0;
+  --muted: #94a3b8;
+  --primary: #6366f1;         /* indigo-500 */
+  --primary-hover: #818cf8;   /* indigo-400 */
+  --ai: #a78bfa;              /* violet-400 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-token: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-ai: var(--ai);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin scrollbars for dense ops tables */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

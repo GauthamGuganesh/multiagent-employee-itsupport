@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.git-backups/
+.ruff_cache/
+*.egg-info/
+
+# Env & local state
+.env
+.env.*
+!.env.example
+.memstore/
+backend/.memstore/
+*.sqlite
+*.sqlite3
+*.db
+
+# Node
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/coverage/
+
+# Local test, coverage, and type-checking artifacts
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.pyre/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: itsupport-postgres
+    environment:
+      POSTGRES_USER: itsupport
+      POSTGRES_PASSWORD: itsupport
+      POSTGRES_DB: itsupport
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U itsupport -d itsupport"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:

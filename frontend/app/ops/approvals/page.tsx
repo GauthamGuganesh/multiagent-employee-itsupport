@@ -1,0 +1,17 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import { Button, Card, ErrorState, Input, Skeleton } from "@/components/ui";
+import { api, isAuthError } from "@/lib/api";
+import type { Approval } from "@/lib/types";
+import { formatDateTime } from "@/lib/format";
+
+export default function ApprovalsPage() {
+  const router = useRouter(); const [approvals, setApprovals] = useState<Approval[] | null>(null); const [error, setError] = useState<string | null>(null); const [reason, setReason] = useState(""); const [working, setWorking] = useState<string | null>(null);
+  const load = useCallback(() => { setError(null); api.get<{ approvals: Approval[] }>("/api/ops/approvals?status=pending").then((result) => setApprovals(result.approvals)).catch((cause) => { if (isAuthError(cause)) router.push("/admin/login"); else setError(cause instanceof Error ? cause.message : "Unable to load approvals."); }); }, [router]);
+  useEffect(() => { const timer = window.setTimeout(load, 0); return () => window.clearTimeout(timer); }, [load]);
+  async function decide(approval: Approval, approved: boolean) { setWorking(approval.id); setError(null); try { await api.post(`/api/ops/approvals/${approval.id}/decision`, { approved, reason }); setReason(""); await load(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to record that decision."); } finally { setWorking(null); } }
+  return <main className="mx-auto max-w-5xl px-4 py-6"><div className="mb-5"><h1 className="text-xl font-semibold tracking-tight">Approvals</h1><p className="mt-1 text-sm text-muted">Human review required before an eligible self-service action can proceed.</p></div>{error && <ErrorState message={error} retry={load} />}{!approvals ? <div className="space-y-3">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-44" />)}</div> : approvals.length === 0 ? <Card className="p-12 text-center text-sm text-muted">No approvals are waiting for a decision.</Card> : <div className="space-y-3">{approvals.map((approval) => <Card key={approval.id} className="p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="font-medium">{approval.action_summary}</p><p className="mt-1 text-sm text-muted">Requested by {approval.requester_employee_id} · approver {approval.approver_employee_id}</p></div><span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">{approval.risk_level} risk</span></div><dl className="mt-4 grid gap-2 text-sm sm:grid-cols-3"><div><dt className="text-xs text-muted">Privilege</dt><dd>{approval.privilege_key}</dd></div><div><dt className="text-xs text-muted">System</dt><dd>{approval.system_key ?? "—"}</dd></div><div><dt className="text-xs text-muted">Requested</dt><dd>{formatDateTime(approval.created_at)}</dd></div></dl><div className="mt-4 flex flex-wrap items-center gap-2"><Input aria-label={`Decision reason for ${approval.id}`} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Decision note (optional)" className="max-w-sm" /><Button type="button" variant="success" disabled={working !== null} onClick={() => void decide(approval, true)}>{working === approval.id ? "Saving…" : "Approve"}</Button><Button type="button" variant="danger" disabled={working !== null} onClick={() => void decide(approval, false)}>Reject</Button></div></Card>)}</div>}</main>;
+}
