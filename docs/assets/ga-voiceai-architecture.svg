@@ -93,6 +93,6 @@
   <path d="M1054 332 V398 H366 V420" class="line"/>
   <path d="M1054 332 V398 H641 V420" class="line"/>
   <path d="M715 364 V420" class="dash"/>
-  <path d="M486 499 H1020" class="line"/>
-  <text x="883" y="412" class="subtitle">SSE</text>
+  <path d="M486 499 V594 H1115 V578" class="line"/>
+  <text x="825" y="586" class="subtitle">Persisted events → SSE</text>
 </svg>

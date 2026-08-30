@@ -1,8 +1,7 @@
 # GA-VoiceAI — Employee IT Support Desk
 
 <p align="center">
-  <strong>AI support that investigates safely, acts with consent, and knows when to involve a human.</strong><br />
-  A portfolio-grade multi-agent IT support platform for a fictional 60-person organization.
+  A multi-agent IT support platform for a fictional 60-person organization.
 </p>
 
 <p align="center">
@@ -108,4 +107,4 @@ npm run build
 - [ElevenLabs voice setup](docs/VOICE_SETUP.md) — signed bridge flow and secure webhook configuration.
 - [Contributor guide](AGENTS.md) — project layout, conventions, and commands.
 
-> This is a deliberately realistic demo. The system uses typed mock integrations for safe local exploration; replace those adapters with real enterprise integrations only after applying production identity, authorization, security, and operational controls.
+> This is a deliberately realistic demo. The system uses typed mock integrations for safe local exploration.
