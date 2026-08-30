@@ -34,3 +34,13 @@ async def test_login_accepts_documented_credentials_and_sets_session(monkeypatch
 async def test_login_rejects_incorrect_password():
     with pytest.raises(HTTPException, match="invalid employee ID or password"):
         await login(LoginRequest(employee_id="EMP-032", password="wrong"), Response())
+
+
+@pytest.mark.asyncio
+async def test_landing_login_accepts_administrator_without_employee_id_validation():
+    response = Response()
+
+    result = await login(LoginRequest(employee_id="admin", password="ga-voiceai-admin"), response)
+
+    assert result == {"username": "admin", "role": "administrator"}
+    assert "it_session=" in response.headers["set-cookie"]

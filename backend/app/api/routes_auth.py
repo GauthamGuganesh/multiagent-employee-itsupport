@@ -42,7 +42,18 @@ def _cookie_options() -> dict[str, bool | str | int]:
 
 @router.post("/login")
 async def login(body: LoginRequest, response: Response):
-    employee_id = body.employee_id.strip().upper()
+    principal = body.employee_id.strip()
+    # The landing page is shared by the demo's employee and administrator
+    # entry points. Recognise the configured administrator before applying the
+    # employee-ID format rule, so `admin` never receives an EMP-xxx error.
+    settings = get_settings()
+    if principal == settings.admin_username:
+        if not is_valid_admin_credentials(principal, body.password):
+            raise HTTPException(status_code=401, detail="invalid administrator credentials")
+        response.set_cookie(COOKIE_NAME, make_admin_session_cookie(principal), **_cookie_options())
+        return {"username": principal, "role": "administrator"}
+
+    employee_id = principal.upper()
     if not is_valid_employee_id(employee_id):
         raise HTTPException(status_code=400, detail="employee id must look like EMP-001")
     if not is_valid_demo_password(employee_id, body.password):

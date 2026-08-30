@@ -21,10 +21,19 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.post<{ employee_id: string; profile: { name?: string } | null }>("/api/auth/login", {
-        employee_id: employeeId.trim().toUpperCase(),
+      const result = await api.post<{
+        employee_id?: string;
+        profile?: { name?: string } | null;
+        role?: "administrator";
+      }>("/api/auth/login", {
+        employee_id: employeeId.trim(),
         password,
       });
+      if (result.role === "administrator") {
+        window.sessionStorage.removeItem(PROFILE_CACHE_KEY);
+        router.push("/ops");
+        return;
+      }
       if (result.profile?.name) {
         window.sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(result));
       } else {
