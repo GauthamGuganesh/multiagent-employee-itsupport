@@ -99,7 +99,8 @@ async def test_supervisor_structured_output_exhaustion_escalates(graph, provider
     # Graceful terminal escalation with a friendly employee-facing message.
     assert result["terminal_status"] == "escalated"
     assert result["ticket_number"] is not None
-    assert "safe execution limit" in result["final_response"]
+    assert "take it further" in result["final_response"]
+    assert "safe execution limit" not in result["final_response"].lower()
     assert result["ticket_number"] in result["final_response"]
 
     async with db_session() as s:

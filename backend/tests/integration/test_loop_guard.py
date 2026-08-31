@@ -107,8 +107,12 @@ async def test_ping_pong_handoffs_trip_loop_signature_guard(graph, provider, org
     assert ticket.status == "escalated"
     assert len(escalation_events) == 1
     assert escalation_events[0].payload["findings_preserved"] == 1
-    assert "automated investigation" in result["final_response"]
-    assert "safe execution limit" in result["final_response"]
+    # Empathetic, jargon-free handoff copy — no internal mechanics exposed.
+    assert "take it further" in result["final_response"]
+    assert not any(
+        j in result["final_response"].lower()
+        for j in ("safe execution limit", "automated investigation", "loop", "budget")
+    )
     assert result["ticket_number"] in result["final_response"]
 
 
@@ -155,4 +159,6 @@ async def test_cycle_budget_exhaustion_escalates(graph, provider, org_stub, monk
     assert len(supervisor_runs) == 2  # the denied third cycle never became a run
     assert escalation.trigger == "budget_exhausted"
     assert result["terminal_status"] == "escalated"
-    assert "safe execution limit" in result["final_response"]
+    assert "take it further" in result["final_response"]
+    assert "safe execution limit" not in result["final_response"].lower()
+    assert result["ticket_number"] in result["final_response"]

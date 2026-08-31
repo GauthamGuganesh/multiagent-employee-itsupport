@@ -29,7 +29,7 @@ async def test_phishing_report_is_a_useful_multiturn_security_conversation(graph
 
     assert second["terminal_status"] == "escalated"
     assert "Platform Manager, Platform & IT Manager" in (second["final_response"] or "")
-    assert "Ticket IT-" in (second["final_response"] or "")
+    assert second["ticket_number"] in (second["final_response"] or "")
 
 
 @pytest.mark.asyncio
@@ -44,7 +44,7 @@ async def test_screen_damage_is_escalated_to_hardware_support_without_account_re
     response = result["final_response"] or ""
     assert result["terminal_status"] == "escalated"
     assert "account" not in response.lower()
-    assert "Ticket IT-" in response
+    assert result["ticket_number"] in response
 
 
 @pytest.mark.asyncio

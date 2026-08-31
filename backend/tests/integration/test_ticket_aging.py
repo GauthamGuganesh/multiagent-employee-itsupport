@@ -52,7 +52,7 @@ async def test_stale_pending_ticket_escalates_on_status_query(graph, provider, o
 
     assert result["terminal_status"] == "escalated"
     assert result["ticket_number"] == ticket.ticket_number
-    assert "escalated" in result["final_response"]
+    assert result["ticket_number"] in result["final_response"]
 
     async with db_session() as s:
         event = (await s.scalars(select(EscalationEvent))).one()

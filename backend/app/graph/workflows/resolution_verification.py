@@ -14,9 +14,9 @@ async def resolution_verify_prepare(state: SupportState) -> dict:
     candidate = state.resolution_candidate or compose_resolution_candidate(state)
     concise_candidate = candidate.strip()[:900]
     prompt = (
-        f"Here’s the current result: {concise_candidate}\n\n"
-        "Before I close this request, is the original issue working normally now? "
-        "Say yes if it is resolved; otherwise tell me what is still happening."
+        f"{concise_candidate}\n\n"
+        "Did that take care of it? If it's working now I'll wrap up here — and while I have you, "
+        "is there anything else I can help you with?"
     )
     await repos.add_message(state.session_id, "assistant", prompt, source=state.channel)
     await record(

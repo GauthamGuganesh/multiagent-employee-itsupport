@@ -88,7 +88,15 @@ def is_simple_informational_request(state: SupportState) -> bool:
 
 
 def resolution_answer_is_clearly_negative(state: SupportState) -> bool:
-    """Hard safety veto; nuanced interpretation remains the supervisor's job."""
+    """Hard safety veto for a wrap-up reply that clearly says the problem
+    persists; nuanced interpretation remains the supervisor's job.
+
+    The wrap-up asks two things at once ("did that fix it, and anything else?"),
+    so a bare "no" is ambiguous — it usually means "no, nothing else" (close),
+    not "no, still broken". This veto therefore only trips on words/phrases that
+    unambiguously indicate the original problem is still happening; "no" alone
+    is left to the supervisor to interpret in context.
+    """
     answer = (state.resolution_confirmation_answer or "").lower()
     if any(
         success in answer
@@ -98,9 +106,10 @@ def resolution_answer_is_clearly_negative(state: SupportState) -> bool:
     words = set(re.findall(r"[a-z']+", answer))
     phrases = (
         "not fixed", "not resolved", "not working", "doesn't work", "does not work",
-        "isn't working", "is not working", "same issue", "disconnected again", "dropped again",
+        "isn't working", "is not working", "same issue", "still happening", "still not",
+        "disconnected again", "dropped again", "didn't help", "did not help", "didn't work",
     )
-    return bool(words & {"no", "still", "broken", "failing"}) or any(
+    return bool(words & {"still", "broken", "failing"}) or any(
         phrase in answer for phrase in phrases
     )
 

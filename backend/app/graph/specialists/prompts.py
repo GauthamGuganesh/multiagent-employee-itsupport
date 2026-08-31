@@ -106,12 +106,16 @@ def build_supervisor_context(state: SupportState) -> str:
         parts.append("The employee DECLINED the proposed action. Do not retry it; wrap up or offer alternatives.")
     if state.awaiting_resolution_confirmation:
         parts.append(
-            "A resolution candidate was proposed and the employee has now tested it. "
-            f"Candidate: {state.resolution_candidate or 'not recorded'}\n"
-            f"Employee result: {state.resolution_confirmation_answer or 'no answer'}\n"
-            "Interpret this result conversationally. Run resolution only if the employee clearly says the "
-            "original problem is fixed. Otherwise continue investigation with the most useful next question "
-            "or specialist; do not repeat the same remedy."
+            "You proposed a resolution and asked the employee to confirm it and whether they need "
+            "anything else.\n"
+            f"Proposed: {state.resolution_candidate or 'not recorded'}\n"
+            f"Employee reply: {state.resolution_confirmation_answer or 'no answer'}\n"
+            "Interpret the reply conversationally and choose ONE:\n"
+            "- If they confirm it is resolved and raise nothing new (e.g. 'yes, thanks', 'all good, "
+            "nothing else'), run the resolution workflow to close.\n"
+            "- If they raise a NEW, different issue, handle THAT now — route to the right specialist or "
+            "ask one focused question. Do NOT close.\n"
+            "- If the original problem is still not fixed, keep investigating; do not repeat the same remedy."
         )
     parts.append(
         f"Budgets: cycle {state.supervisor_cycle_count + 1}, handoffs used {state.handoff_count}, "

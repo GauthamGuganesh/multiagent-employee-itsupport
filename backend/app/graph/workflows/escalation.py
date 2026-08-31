@@ -3,7 +3,7 @@
 Also hosts the stale-ticket sweep (pending > PENDING_ESCALATION_DAYS) used at
 query time and by the startup/interval task — deliberately not an SLA engine.
 """
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.config import get_settings
 from app.contracts.common import HumanTarget
@@ -26,6 +26,21 @@ CATEGORY_SYSTEM = {
 }
 
 AUTOMATION_LIMIT_TRIGGERS = {"budget_exhausted", "loop_guard", "structured_output_failure"}
+
+# Natural, employee-facing phrase for a category — used only to personalize
+# closing messages. Never expose internal agent/tool/workflow terminology.
+CATEGORY_ISSUE_PHRASE = {
+    "identity": "the trouble getting into your account",
+    "endpoint": "the problem with your device",
+    "network": "the connection trouble",
+    "security": "this security concern",
+    "ticketing": "your request",
+    "other": "this",
+}
+
+
+def _issue_phrase(state: SupportState) -> str:
+    return CATEGORY_ISSUE_PHRASE.get(state.category or "other", "this")
 
 
 async def _resolve_target(
@@ -133,23 +148,28 @@ async def escalation_node(state: SupportState) -> dict:
     )
 
     who = describe_human_target(target)
+    issue = _issue_phrase(state)
     if trigger in AUTOMATION_LIMIT_TRIGGERS:
+        # The autonomous side has done what it safely can; a person should take
+        # it further. Say that warmly, without exposing any internal mechanics.
         response = (
-            "I'm sorry this is still interrupting your work. I wasn't able to finish the "
-            f"automated investigation because it reached its safe execution limit, so I've handed everything I found to {who}. "
-            f"Ticket {ticket_number} has the diagnostic details and is now ready for their follow-up."
+            f"Thanks for your patience — I'm sorry {issue} is still going on. I've looked into "
+            f"it and pulled together what I found, but it needs a person to take it further, so "
+            f"I've passed it to {who}. They'll follow up with you directly, and you can track "
+            f"progress under ticket {ticket_number}."
         )
     elif security_related:
         response = (
-            "I'm sorry this has raised a security concern. To keep your account safe, I've "
-            f"escalated it to {who} for review. Ticket {ticket_number} tracks the case; "
-            "please follow any guidance they send you."
+            "Thanks for flagging this — because it touches account security, I've asked "
+            f"{who} to take a closer look so nothing is missed. They'll be in touch, and "
+            f"ticket {ticket_number} tracks it. If they ask you to do anything, please follow "
+            "that guidance."
         )
     else:
         response = (
-            "I'm sorry this is disrupting your work. I've escalated the case to "
-            f"{who}, who can take the next steps. Ticket {ticket_number} includes the "
-            "evidence gathered so far and tracks the handoff."
+            f"I'm sorry about {issue}. To get you the right help, I've passed this to {who}, "
+            f"who will take it from here and follow up with you directly. You can track it "
+            f"under ticket {ticket_number}."
         )
 
     update = await finalize_session(
@@ -170,8 +190,8 @@ async def escalation_node(state: SupportState) -> dict:
 def pending_age_days(pending_since: datetime | None) -> int | None:
     if pending_since is None:
         return None
-    ps = pending_since if pending_since.tzinfo else pending_since.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - ps).days
+    ps = pending_since if pending_since.tzinfo else pending_since.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - ps).days
 
 
 async def escalate_stale_ticket(ticket_id: str) -> dict | None:

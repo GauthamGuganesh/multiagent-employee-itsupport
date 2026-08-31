@@ -26,7 +26,8 @@ def compose_resolution_candidate(state: SupportState) -> str:
 async def resolution_node(state: SupportState) -> dict:
     candidate = state.resolution_candidate or compose_resolution_candidate(state)
     response = (
-        "Thanks for confirming — I’m glad the issue is resolved. I’ve closed this support request."
+        "Glad I could help get that sorted! I’ve closed this request. "
+        "If anything else comes up, just start a new chat — happy to help anytime."
         if get_settings().require_employee_resolution_confirmation
         else candidate
     )

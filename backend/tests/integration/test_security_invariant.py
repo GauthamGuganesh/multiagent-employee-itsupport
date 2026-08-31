@@ -91,8 +91,9 @@ async def test_repeatedly_invalid_supervisor_output_escalates_gracefully(
     result = await dispatcher.start_session("EMP-031", SUSPICIOUS_REQUEST)
 
     assert result["terminal_status"] == "escalated"
-    # Friendly automation-limit story, not a crash.
-    assert "safe execution limit" in result["final_response"]
+    # Empathetic, jargon-free handoff copy, not a crash.
+    assert "take it further" in result["final_response"]
+    assert "safe execution limit" not in result["final_response"].lower()
 
     # Initial attempt + exactly 2 retries — never a third retry.
     supervisor_calls = [c for c in provider.calls if c[0] == "SupervisorDecision"]

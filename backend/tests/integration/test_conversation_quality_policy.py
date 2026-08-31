@@ -50,7 +50,8 @@ async def test_intermittent_vpn_diagnoses_tests_and_closes_only_after_employee_c
 
     assert final["terminal_status"] == "resolved"
     assert final["ticket_number"] is None
-    assert "Thanks for confirming" in final["final_response"]
+    # Warm, jargon-free close.
+    assert "closed this request" in final["final_response"]
 
     async with db_session() as session:
         ticket_count = await session.scalar(select(func.count()).select_from(Ticket))
@@ -89,7 +90,8 @@ async def test_failed_vpn_test_returns_to_investigation_in_same_session(
     assert result["terminal_status"] is None
     assert result["ticket_number"] is None
     assert result["pending"]["type"] == "question"
-    assert "exact time" in result["assistant_message"]
+    # A clearly-negative result keeps investigating, asking what actually happened.
+    assert "happened" in result["assistant_message"].lower()
 
 
 async def test_voice_vpn_turns_resume_one_canonical_support_session(
