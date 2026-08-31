@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useRouter } from "next/navigation";
 
@@ -50,6 +50,11 @@ export default function SupportPage() {
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [voiceActive, setVoiceActive] = useState(false);
+  // A live voice call that has ended closes the on-screen conversation. Kept
+  // separate from terminalStatus because the browser never receives the voice
+  // session's real outcome (that lives server-side behind the ElevenLabs webhook).
+  const [voiceClosed, setVoiceClosed] = useState(false);
+  const voiceWasActiveRef = useRef(false);
   useSessionProgress(sessionId, setProgress);
 
   const loadSession = useCallback(async (id: string) => {
@@ -76,8 +81,20 @@ export default function SupportPage() {
   }, []);
 
   const handleVoiceActiveChange = useCallback((active: boolean) => {
+    // Detect the true→false transition: when a call that was actually live ends
+    // (not a connection that never connected), close the conversation on screen
+    // instead of leaving it open for text. A ref holds the previous value so we
+    // read it without stale-closure risk and without side effects in a setter.
+    const wasActive = voiceWasActiveRef.current;
+    voiceWasActiveRef.current = active;
     setVoiceActive(active);
-    setProgress(active ? "Voice conversation is live." : null);
+    if (wasActive && !active) {
+      setProgress(null);
+      setVoiceClosed(true);
+    } else {
+      setProgress(active ? "Voice conversation is live." : null);
+      if (active) setVoiceClosed(false); // a fresh call reopens the conversation
+    }
   }, []);
 
   const send = useCallback(async (text: string, confirmation?: boolean) => {
@@ -106,7 +123,7 @@ export default function SupportPage() {
     await send(text);
   }
   function startNewRequest() {
-    setSessionId(null); setMessages([]); setPending(null); setTerminalStatus(null); setDraft(""); setError(null); setProgress(null);
+    setSessionId(null); setMessages([]); setPending(null); setTerminalStatus(null); setDraft(""); setError(null); setProgress(null); setVoiceClosed(false);
   }
   const greeting = `Hi${me?.profile?.name ? `, ${me.profile.name.split(" ")[0]}` : ""}. What can IT help with?`;
 
@@ -116,6 +133,6 @@ export default function SupportPage() {
       {messages.length === 0 ? <div className="flex h-full flex-col justify-center py-10 text-center"><div className="mx-auto max-w-md"><p className="text-sm text-muted">I can help with access, devices, network issues, security concerns, and existing IT requests.</p><div className="mt-5 flex flex-wrap justify-center gap-2">{EXAMPLES.map((example) => <button key={example} type="button" onClick={() => setDraft(example)} className="rounded-full border border-border-token px-3 py-1.5 text-sm text-muted transition-colors hover:border-indigo-300 hover:bg-surface-muted hover:text-foreground">{example}</button>)}</div></div></div> : messages.map((message, index) => <motion.div key={`${message.at}-${index}`} initial={reduceMotion ? false : { opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}><MessageBubble message={message} /></motion.div>)}
       {progress && <div className="flex items-center gap-2 text-sm text-ai">{busy && <Spinner className="h-3.5 w-3.5" />}{progress}</div>}
       {pending?.type === "confirmation" && <PendingCard pending={pending} onConfirm={(value) => void send("", value)} />}{error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
-    </div>{terminalStatus ? <div className="flex items-center justify-between gap-3 border-t border-border-token p-3 sm:p-4"><p className="text-sm text-muted">This request is {terminalStatus === "resolved" ? "complete" : "with the support team"}.</p><Button type="button" variant="secondary" onClick={startNewRequest}>Start a new request</Button></div> : <form onSubmit={submit} className="border-t border-border-token p-3 sm:p-4"><div className="flex items-end gap-2"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={2} disabled={busy || voiceActive || pending?.type === "confirmation"} placeholder={voiceActive ? "Voice conversation is active…" : pending?.type === "question" ? "Type your answer…" : "Tell us what’s happening…"} className="min-h-11 flex-1 resize-none rounded-xl border border-border-token bg-surface px-3 py-2 text-sm outline-none placeholder:text-muted focus:ring-2 focus:ring-indigo-400/60 disabled:opacity-50" /><Button type="submit" disabled={busy || voiceActive || !draft.trim() || pending?.type === "confirmation"}>{busy ? <Spinner className="h-3.5 w-3.5 border-white/40 border-t-white" /> : "Send"}</Button></div></form>}
+    </div>{terminalStatus || voiceClosed ? <div className="flex items-center justify-between gap-3 border-t border-border-token p-3 sm:p-4"><p className="text-sm text-muted">{terminalStatus ? `This request is ${terminalStatus === "resolved" ? "complete" : "with the support team"}.` : "This voice conversation has ended — start a new request to continue."}</p><Button type="button" variant="secondary" onClick={startNewRequest}>Start a new request</Button></div> : <form onSubmit={submit} className="border-t border-border-token p-3 sm:p-4"><div className="flex items-end gap-2"><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={2} disabled={busy || voiceActive || pending?.type === "confirmation"} placeholder={voiceActive ? "Voice conversation is active…" : pending?.type === "question" ? "Type your answer…" : "Tell us what’s happening…"} className="min-h-11 flex-1 resize-none rounded-xl border border-border-token bg-surface px-3 py-2 text-sm outline-none placeholder:text-muted focus:ring-2 focus:ring-indigo-400/60 disabled:opacity-50" /><Button type="submit" disabled={busy || voiceActive || !draft.trim() || pending?.type === "confirmation"}>{busy ? <Spinner className="h-3.5 w-3.5 border-white/40 border-t-white" /> : "Send"}</Button></div></form>}
     </section></main></>;
 }
