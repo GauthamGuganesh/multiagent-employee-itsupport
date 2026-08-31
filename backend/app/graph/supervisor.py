@@ -8,6 +8,7 @@ from langgraph.types import Command
 
 from app.config import get_settings
 from app.contracts.common import Transition
+from app.contracts.enums import SPECIALIST_NAMES
 from app.contracts.supervisor import SupervisorDecision
 from app.db import repos
 from app.events.recorder import record
@@ -28,12 +29,15 @@ WORKFLOW_NODES = {
     "ticket_status": "ticket_status",
 }
 
-SPECIALIST_CATEGORY = {
-    "identity": "identity",
-    "endpoint": "endpoint",
-    "network": "network",
-    "security": "security",
-}
+# Specialist name and triage category coincide for the four investigating
+# domains, so both directions derive from the single SPECIALIST_NAMES source.
+SPECIALIST_CATEGORY = {name: name for name in SPECIALIST_NAMES}
+
+
+def _category_specialist(category: str | None) -> str | None:
+    """The domain specialist that can investigate a category with real tools,
+    or None for 'ticketing'/'other' (no investigating specialist)."""
+    return category if category in SPECIALIST_NAMES else None
 
 
 def _escalate(state: SupportState, *, reason: str, trigger: str, cycle: int, extra: dict | None = None) -> Command:
@@ -168,31 +172,74 @@ async def supervisor_node(state: SupportState) -> Command:
             state, decision.question_for_employee or ""
         )
         if question_verdict.tripped:
-            await record(
-                EventType.LOOP_GUARD_TRIGGERED,
-                session_id=state.session_id,
-                actor="supervisor",
-                payload={
-                    "kind": question_verdict.kind,
-                    "reason": question_verdict.reason,
-                    "question": decision.question_for_employee,
-                },
+            # Questioning has stopped adding information. The productive move is
+            # to INVESTIGATE with the domain specialist's tools (diagnostics the
+            # system hasn't run yet), not to dump the case on a human. Convert
+            # the question into a route to that specialist when one applies and
+            # it hasn't already investigated this turn; only escalate when no
+            # specialist can help (e.g. category 'other'/'ticketing') or it has
+            # already had its turn.
+            investigator = _category_specialist(state.category or decision.category)
+            can_investigate = (
+                investigator is not None
+                and investigator not in state.previous_agents
+                and not guards.check_handoff_budget(state, investigator).tripped
             )
-            await repos.complete_agent_run(
-                run.id,
-                status="completed",
-                outcome="information_guard",
-                loop_guard_triggered=True,
-                result=decision.model_dump(mode="json"),
-                structured_output_retries=outcome.retries,
-            )
-            return _escalate(
-                state,
-                reason=question_verdict.reason or "follow-up questions are no longer advancing the case",
-                trigger="loop_guard",
-                cycle=cycle,
-                extra={"loop_guard_triggered": True},
-            )
+            if can_investigate:
+                await record(
+                    EventType.LOOP_GUARD_TRIGGERED,
+                    session_id=state.session_id,
+                    actor="supervisor",
+                    payload={
+                        "kind": question_verdict.kind,
+                        "reason": question_verdict.reason,
+                        "question": decision.question_for_employee,
+                        "converted_to": f"route_to_specialist:{investigator}",
+                    },
+                )
+                overrides.append(
+                    f"repeated question stopped adding info; investigating with {investigator} instead of re-asking"
+                )
+                decision = decision.model_copy(
+                    update={
+                        "decision": "route_to_specialist",
+                        "target_specialist": investigator,
+                        "question_for_employee": None,
+                        # Align the category with where we actually routed so the
+                        # persisted triage and audit label the investigation
+                        "category": SPECIALIST_CATEGORY.get(investigator, decision.category),
+                        "reason": (
+                            "Further questions were no longer adding information, so I'm "
+                            f"investigating directly with the {investigator} specialist's diagnostics."
+                        ),
+                    }
+                )
+            else:
+                await record(
+                    EventType.LOOP_GUARD_TRIGGERED,
+                    session_id=state.session_id,
+                    actor="supervisor",
+                    payload={
+                        "kind": question_verdict.kind,
+                        "reason": question_verdict.reason,
+                        "question": decision.question_for_employee,
+                    },
+                )
+                await repos.complete_agent_run(
+                    run.id,
+                    status="completed",
+                    outcome="information_guard",
+                    loop_guard_triggered=True,
+                    result=decision.model_dump(mode="json"),
+                    structured_output_retries=outcome.retries,
+                )
+                return _escalate(
+                    state,
+                    reason=question_verdict.reason or "follow-up questions are no longer advancing the case",
+                    trigger="loop_guard",
+                    cycle=cycle,
+                    extra={"loop_guard_triggered": True},
+                )
 
     # A specialist that has exhausted its schema retries cannot safely make
     # progress on another invocation. Preserve the evidence and hand the case
