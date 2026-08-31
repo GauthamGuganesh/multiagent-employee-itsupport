@@ -47,7 +47,15 @@ class Settings(BaseSettings):
     neo4j_password: str = Field(
         default="", validation_alias=AliasChoices("NEO4J_PASSWORD", "IT_NEO4J_PASSWORD")
     )
-    neo4j_database: str = "neo4j"
+    # Default "neo4j" is the standard Aura database name, but some hosted
+    # instances name the database after the instance id (e.g. "826a32a8"). Accept
+    # the same NEO4J_* / IT_NEO4J_* convention as the other Neo4j settings so a
+    # plain NEO4J_DATABASE env var is honored (previously only IT_NEO4J_DATABASE
+    # was read, which silently fell back to "neo4j" and broke routing).
+    neo4j_database: str = Field(
+        default="neo4j",
+        validation_alias=AliasChoices("NEO4J_DATABASE", "IT_NEO4J_DATABASE"),
+    )
 
     # --- Cross-session memory ---
     # Mem0 is required; there is no local/off fallback. A missing MEM0_API_KEY
