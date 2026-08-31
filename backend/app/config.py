@@ -62,7 +62,11 @@ class Settings(BaseSettings):
     # A question is useful only when it unlocks a materially different next
     # step. This session-wide guard prevents an LLM from rephrasing the same
     # interview across employee replies.
-    max_information_requests: int = 2
+    # Emergency ceiling only, not a conversational target. Evidence readiness
+    # and repeated-question detection control normal conversations.
+    max_information_requests: int = 20
+    require_employee_resolution_confirmation: bool = True
+    create_ticket_for_resolved_sessions: bool = False
     min_specialist_confidence: float = 0.35
 
     # --- Ticket aging ---

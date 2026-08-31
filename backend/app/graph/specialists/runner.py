@@ -147,7 +147,7 @@ async def run_specialist(spec: SpecialistSpec, state: SupportState) -> dict:
         fixes["findings"] = [finding.model_copy(update={"agent": spec.name}) for finding in result.findings]
     if set(result.tools_used) != set(tools_used):
         fixes["tools_used"] = tools_used
-    if result.outcome == "resolved" and result.confidence < settings.min_specialist_confidence:
+    if result.outcome == "resolution_recommended" and result.confidence < settings.min_specialist_confidence:
         fixes["outcome"] = "unable_to_resolve"
         fixes["resolution_summary"] = None
         fixes["reasoning_summary"] = (
@@ -188,6 +188,9 @@ async def run_specialist(spec: SpecialistSpec, state: SupportState) -> dict:
         **base_update,
         "specialist_results": [result],
         "specialist_findings": list(result.findings),
+        "awaiting_resolution_confirmation": False,
+        "resolution_confirmation_answer": None,
+        "resolution_confirmed": None,
         "transition_history": [
             Transition(from_node=spec.name, to_node="supervisor", reason=result.outcome)
         ],

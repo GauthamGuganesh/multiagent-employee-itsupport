@@ -5,6 +5,61 @@ from app.events.recorder import record
 from app.events.types import EventType
 from app.graph.state import SupportState
 from app.llm.provider import get_provider
+from app.org import keys
+
+
+# Keyword → category for classifying a free-text secondary intent so its
+# ticket carries a real domain (ops filters and routing depend on it) instead
+# of a blanket "other". First match wins; order matters least-ambiguous first.
+_CATEGORY_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("security", ("phishing", "suspicious", "hacked", "compromis", "malware")),
+    ("identity", ("locked", "lock out", "locked out", "password", "mfa", "sign in", "log in", "login", "access")),
+    ("network", ("vpn", "wifi", "wi-fi", "internet", "network", "connection", "dns", "proxy")),
+    ("endpoint", ("laptop", "device", "disk", "install", "software", "docker", "slow", "screen", "printer")),
+)
+
+
+def _classify_intent(text: str) -> str:
+    lowered = text.lower()
+    for category, keywords in _CATEGORY_KEYWORDS:
+        if any(keyword in lowered for keyword in keywords):
+            return category
+    return "other"
+
+
+async def _track_secondary_intents(state: SupportState) -> str:
+    """Open a tracked ticket for each not-yet-handled intent from a multi-intent
+    message and return an employee-facing note listing them. Returns "" when
+    there are none. This is the guarantee that a single message with several
+    problems never silently loses the ones the conversation didn't work on."""
+    if not state.pending_intents:
+        return ""
+    opened: list[str] = []
+    for description in state.pending_intents:
+        ticket = await repos.create_ticket(
+            session_id=state.session_id,
+            requester_employee_id=state.employee_id,
+            category=_classify_intent(description),
+            title=description[:200],
+            description=f"Additional issue raised in the same request: {description}",
+            status="open",
+            current_team_key=keys.SUPPORT_IT,
+            originating_agent="supervisor",
+        )
+        opened.append(f"{ticket.ticket_number} ({description})")
+        await record(
+            EventType.TICKET_CREATED,
+            session_id=state.session_id,
+            ticket_id=ticket.id,
+            actor="supervisor",
+            payload={"ticket_number": ticket.ticket_number, "status": "open", "secondary_intent": description},
+        )
+    listing = "; ".join(opened)
+    return (
+        "\n\nYou also mentioned other things in the same message, so I've logged them "
+        f"separately so they don't get lost: {listing}. You can track these under "
+        "“My requests.”"
+    )
 
 
 async def ingest_node(state: SupportState) -> dict:
@@ -61,6 +116,10 @@ async def finalize_session(
     cross-session memory when policy says so, and emit SESSION_COMPLETED."""
     from app.memory.policy import build_session_memory
     from app.memory.service import get_memory_service
+
+    # Never drop the other issues from a multi-intent message: open a tracked
+    # ticket for each and tell the employee, as part of this closing turn.
+    final_response = final_response + await _track_secondary_intents(state)
 
     await repos.add_message(state.session_id, "assistant", final_response, source=state.channel)
     await repos.update_support_session(

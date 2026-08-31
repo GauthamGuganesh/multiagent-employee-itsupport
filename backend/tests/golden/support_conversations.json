@@ -1,5 +1,19 @@
 [
   {
+    "id": "network-intermittent-vpn-resolved-after-employee-test",
+    "employee_id": "EMP-021",
+    "request": "My VPN connects but keeps disconnecting.",
+    "replies": [
+      "It drops on both my home Wi-Fi and phone hotspot. It started after a password change.",
+      "Yes, it is stable now and has not dropped again."
+    ],
+    "production_policy": true,
+    "expected_initial_pending": "question",
+    "expected_terminal": "resolved",
+    "expected_ticket": false,
+    "expected_agents": ["network"]
+  },
+  {
     "id": "identity-lockout-confirmation",
     "employee_id": "EMP-034",
     "request": "I am locked out of my account after several sign-in attempts.",
@@ -17,7 +31,10 @@
     "id": "network-generic-vpn-clarification-and-security-handoff",
     "employee_id": "EMP-014",
     "request": "My VPN is not working.",
-    "reply": "It connects, then drops every ten minutes. I also saw an unfamiliar sign-in alert.",
+    "replies": [
+      "It connects, then drops every ten minutes. I also saw an unfamiliar sign-in alert.",
+      "It happens on both my home Wi-Fi and phone hotspot, and started after a password change."
+    ],
     "expected_initial_pending": "question",
     "expected_terminal": "escalated",
     "expected_agents": ["network", "security"]

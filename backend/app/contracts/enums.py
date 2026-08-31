@@ -16,7 +16,7 @@ SupervisorDecisionType = Literal[
     "route_to_specialist", "ask_employee", "run_workflow", "close_session"
 ]
 SpecialistOutcome = Literal[
-    "resolved",
+    "resolution_recommended",
     "need_more_information",
     "handoff_recommended",
     "approval_required",

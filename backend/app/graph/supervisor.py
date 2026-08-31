@@ -140,6 +140,26 @@ async def supervisor_node(state: SupportState) -> Command:
     decision = decision.model_copy(update=normalized)
     overrides: list[str] = []
 
+    # Direct closing is only for genuinely informational requests. Incidents
+    # must be investigated and then verified by the employee.
+    if (
+        decision.decision == "close_session"
+        and settings.require_employee_resolution_confirmation
+        and not guards.is_simple_informational_request(state)
+    ):
+        overrides.append("incident close_session overrode to a diagnostic question")
+        decision = decision.model_copy(
+            update={
+                "decision": "ask_employee",
+                "message_to_employee": None,
+                "question_for_employee": (
+                    "I don’t want to close this before it is genuinely useful. What outcome do you need, "
+                    "and what exactly happens when you try it now?"
+                ),
+                "reason": "The request describes an unresolved incident without enough evidence to close.",
+            }
+        )
+
     # Information requests are bounded across the *whole session*, not merely
     # a single LangGraph invocation. This makes a rephrased version of an
     # already answered question a safe escalation instead of an endless chat.
@@ -193,6 +213,30 @@ async def supervisor_node(state: SupportState) -> Command:
             }
         )
 
+    # Invariant: a specialist's handoff is a first-class routing instruction,
+    # not a hint the supervisor may reinterpret. Honor it in code so a
+    # cross-domain handoff (e.g. network → security) can never be silently
+    # downgraded into a premature escalation or resolution. The handoff and
+    # loop budgets, checked below, remain the backstop against ping-pong.
+    handoff_target = guards.pending_handoff_target(state)
+    if handoff_target is not None and not (
+        decision.decision == "route_to_specialist"
+        and decision.target_specialist == handoff_target
+    ):
+        overrides.append(
+            f"honored specialist handoff to {handoff_target}; overrode {decision.decision}"
+        )
+        handoff_update = {
+            "decision": "route_to_specialist",
+            "target_specialist": handoff_target,
+            "workflow": None,
+            "category": SPECIALIST_CATEGORY.get(handoff_target, decision.category),
+            "reason": decision.reason or f"Routing to {handoff_target} at the previous specialist's recommendation.",
+        }
+        if handoff_target == "security":
+            handoff_update.update({"risk_level": "high", "autonomy_level": "human_only"})
+        decision = decision.model_copy(update=handoff_update)
+
     # Invariant: a security-flagged case can never be autonomously resolved.
     if guards.security_requires_human(state) and not (
         decision.decision == "run_workflow" and decision.workflow == "escalation"
@@ -218,6 +262,51 @@ async def supervisor_node(state: SupportState) -> Command:
     ):
         overrides.append("requested_action pending; resolution overrode to confirmation")
         decision = decision.model_copy(update={"workflow": "confirmation"})
+
+    if (
+        state.awaiting_resolution_confirmation
+        and decision.decision == "run_workflow"
+        and decision.workflow == "resolution"
+        and guards.resolution_answer_is_clearly_negative(state)
+    ):
+        overrides.append("negative employee resolution signal blocked closure")
+        decision = decision.model_copy(
+            update={
+                "decision": "ask_employee",
+                "workflow": None,
+                "question_for_employee": (
+                    "Thanks for testing that, and I’m sorry it’s still happening. "
+                    "What exactly happened when you tried again, including any error or timing you noticed?"
+                ),
+                "reason": "The employee explicitly reported that the original issue remains unresolved.",
+            }
+        )
+
+    resolution_approved = (
+        decision.decision == "run_workflow"
+        and decision.workflow == "resolution"
+        and (
+            state.resolution_confirmed is True
+            or state.awaiting_resolution_confirmation
+        )
+    )
+    if resolution_approved and state.awaiting_resolution_confirmation:
+        overrides.append("employee resolution answer accepted by supervisor")
+        await record(
+            EventType.USER_CONFIRMED,
+            session_id=state.session_id,
+            actor=state.employee_id,
+            payload={
+                "purpose": "resolution_confirmation",
+                "answer": state.resolution_confirmation_answer,
+            },
+        )
+    elif (
+        decision.decision == "run_workflow"
+        and decision.workflow == "resolution"
+        and settings.require_employee_resolution_confirmation
+    ):
+        overrides.append("specialist resolution converted to employee verification")
 
     # Loop-signature guard.
     signature = guards.decision_signature(state, decision)
@@ -300,6 +389,29 @@ async def supervisor_node(state: SupportState) -> Command:
         "risk_level": decision.risk_level,
         "autonomy_level": decision.autonomy_level,
     }
+    # Capture secondary issues from a multi-intent message exactly once, at the
+    # first triage. They are tracked so finalize_session can open a ticket for
+    # each — a single message with three problems never loses two of them. The
+    # captured list is already audited via decision.additional_intents in the
+    # SUPERVISOR_DECISION event emitted below, so no separate event is needed.
+    if (
+        not state.pending_intents
+        and not state.specialist_results
+        and decision.additional_intents
+    ):
+        secondary = [i.strip() for i in decision.additional_intents if i.strip()][:5]
+        if secondary:
+            common_update["pending_intents"] = secondary
+    if state.awaiting_resolution_confirmation:
+        common_update.update(
+            {
+                "awaiting_resolution_confirmation": False,
+                "resolution_confirmed": resolution_approved,
+                "resolution_confirmation_answer": None,
+            }
+        )
+        if not resolution_approved:
+            common_update["resolution_candidate"] = None
 
     if decision.decision == "route_to_specialist":
         target = decision.target_specialist or "identity"
@@ -337,6 +449,12 @@ async def supervisor_node(state: SupportState) -> Command:
 
     if decision.decision == "run_workflow":
         node = WORKFLOW_NODES.get(decision.workflow or "", "escalation")
+        if (
+            decision.workflow == "resolution"
+            and settings.require_employee_resolution_confirmation
+            and not resolution_approved
+        ):
+            node = "resolution_verify_prepare"
         update = {
             **common_update,
             "transition_history": [
@@ -356,7 +474,7 @@ async def supervisor_node(state: SupportState) -> Command:
             )
         return Command(goto=node, update=update)
 
-    # close_session
+    # close_session is now limited to simple informational requests.
     return Command(
         goto="close_direct",
         update={

@@ -73,9 +73,13 @@ export default function SupportPage() {
     const syncVoiceTranscript = async () => {
       try {
         const data = await api.get<{ sessions: SessionSummary[] }>("/api/chat/sessions");
-        const voiceSession = data.sessions.find(
-          (item) => item.channel === "voice" && Date.parse(item.created_at) >= voiceStartedAt - 15_000,
-        );
+        // Pick the NEWEST voice session started for this call, independent of
+        // the list's ordering, so we never latch onto a stale voice session.
+        const voiceSession = data.sessions
+          .filter(
+            (item) => item.channel === "voice" && Date.parse(item.created_at) >= voiceStartedAt - 15_000,
+          )
+          .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
         if (!voiceSession || cancelled) return;
         if (voiceSession.id !== sessionId) {
           setSessionId(voiceSession.id);

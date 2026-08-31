@@ -60,6 +60,12 @@ class SupportState(BaseModel):
     risk_level: RiskLevel | None = None
     autonomy_level: AutonomyLevel | None = None
 
+    # Secondary issues found in a multi-intent message. Captured at first triage
+    # (last-write-wins; only the triage cycle writes it) so that handling the
+    # primary issue can never silently drop the others — finalize_session opens
+    # a tracked ticket for each remaining intent and tells the employee.
+    pending_intents: list[str] = Field(default_factory=list)
+
     # --- routing & investigation ---
     current_agent: str | None = None
     previous_agents: Annotated[list[str], operator.add] = Field(default_factory=list)
@@ -103,6 +109,14 @@ class SupportState(BaseModel):
     # budgets. A new employee reply must not let the system interview them
     # indefinitely with differently worded versions of the same question.
     information_request_count: int = 0
+
+    # A specialist proposes a resolution; only the employee can confirm that
+    # the original issue is actually fixed.  This prevents a healthy snapshot
+    # or successful tool call from silently closing the conversation.
+    resolution_candidate: str | None = None
+    awaiting_resolution_confirmation: bool = False
+    resolution_confirmation_answer: str | None = None
+    resolution_confirmed: bool | None = None
 
     # --- terminal ---
     terminal_status: TerminalStatus | None = None

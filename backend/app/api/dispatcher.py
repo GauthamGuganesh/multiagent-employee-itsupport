@@ -6,6 +6,8 @@ fail-safe: any exception from a graph run becomes a graceful escalation, never
 a bare 500.
 """
 import asyncio
+import logging
+import traceback
 from typing import Any
 
 from langgraph.types import Command
@@ -15,6 +17,8 @@ from app.db import repos
 from app.events.recorder import record
 from app.events.types import EventType
 from app.org import keys
+
+logger = logging.getLogger("app.dispatcher")
 
 _graph = None
 _locks: dict[str, asyncio.Lock] = {}
@@ -79,10 +83,16 @@ async def _fail_safe(session_id: str, employee_id: str, error: Exception) -> dic
     """Out-of-graph escalation: same story as the escalation workflow, built
     directly from repos so it works even when the graph itself is the problem."""
     reason = f"automated processing failed unexpectedly: {type(error).__name__}"
+    logger.error(
+        "fail-safe escalation for session %s: %s\n%s",
+        session_id,
+        error,
+        "".join(traceback.format_exception(type(error), error, error.__traceback__)),
+    )
     message = (
-        "Something went wrong on my side while working on this, so I've flagged it "
-        "for the IT support team to pick up directly. Sorry about that — you don't "
-        "need to do anything else."
+        "I hit a technical problem while handling this and couldn't finish it "
+        "automatically. I've logged it for the IT support team and a specialist will "
+        "follow up with you directly. You don't need to resend anything."
     )
     ticket_number = None
     try:
@@ -98,6 +108,14 @@ async def _fail_safe(session_id: str, employee_id: str, error: Exception) -> dic
             originating_agent="dispatcher",
         )
         ticket_number = ticket.ticket_number
+        # Now that a tracking number exists, make the reply concrete: the
+        # employee can find and follow this exact ticket under "My requests".
+        message = (
+            "I hit a technical problem while handling this and couldn't finish it "
+            f"automatically. I've logged it as ticket {ticket_number} for the IT support "
+            "team, and a specialist will follow up with you directly. You can track it "
+            "under “My requests” — there's nothing else you need to do right now."
+        )
         await repos.create_escalation_event(
             ticket_id=ticket.id,
             session_id=session_id,

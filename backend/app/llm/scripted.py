@@ -32,6 +32,15 @@ def _employee_text(messages: list[tuple[str, str]]) -> str:
     return " ".join(parts).lower() if parts else joined.lower()
 
 
+def _latest_employee_turn(messages: list[tuple[str, str]]) -> str:
+    joined = "\n".join(content for role, content in messages if role == "user")
+    turns = re.findall(r"\[employee\] (.+)", joined)
+    if turns:
+        return turns[-1].lower()
+    match = re.search(r"Original request: (.+)", joined)
+    return match.group(1).lower() if match else ""
+
+
 def _obs_text(messages: list[tuple[str, str]]) -> str:
     """Only this run's tool observations — evidence checks must never match
     mission prompts or conversation text."""
@@ -105,12 +114,61 @@ class ScriptedProvider:
                 reason="employee declined the action; closing gracefully",
             )
 
+        # Resolution is an employee-owned signal interpreted by the
+        # supervisor, not by the workflow or specialist. This branch is only
+        # used by deterministic demo mode; OpenAI makes the same structured
+        # decision from the supervisor prompt.
+        if "employee has now tested it" in text:
+            answer = _latest_employee_turn(messages)
+            negative = any(
+                marker in answer
+                for marker in (
+                    "no", "still", "not fixed", "not working", "doesn't work",
+                    "disconnected again", "dropped again", "same issue",
+                )
+            )
+            positive = any(
+                marker in answer
+                for marker in (
+                    "yes", "working now", "works now", "fixed", "resolved",
+                    "stable now", "can connect", "all good", "has not dropped again",
+                )
+            )
+            if positive and not any(
+                marker in answer for marker in ("still not", "not working", "not fixed", "not resolved")
+            ):
+                return decision(
+                    decision="run_workflow", workflow="resolution",
+                    category="network" if "vpn" in text else "other",
+                    intent="employee confirmed the original issue is resolved",
+                    reason="employee explicitly confirmed the tested outcome resolved the issue",
+                )
+            if negative:
+                return decision(
+                    decision="ask_employee",
+                    category="network" if "vpn" in text else "other",
+                    question_for_employee=(
+                        "Thanks for testing that, and I’m sorry it’s still happening. "
+                        "When it failed again, what exact time did it happen and what error or behavior did you see?"
+                    ),
+                    reason="the employee reported that the proposed resolution did not fix the original symptom",
+                )
+            return decision(
+                decision="ask_employee",
+                category="network" if "vpn" in text else "other",
+                question_for_employee=(
+                    "Just to make sure I understood your test: is the original issue now fixed, "
+                    "or is it still happening?"
+                ),
+                reason="the employee's resolution signal is ambiguous",
+            )
+
         has_action = "pending requested_action" in text
         security_escalated = '"agent": "security"' in text and '"outcome": "escalation_required"' in text
         any_result = '"outcome":' in text
         handoff_to_security = '"outcome": "handoff_recommended"' in text and '"target_agent": "security"' in text
         needs_information = '"outcome": "need_more_information"' in text
-        resolved = '"outcome": "resolved"' in text
+        resolved = '"outcome": "resolution_recommended"' in text
         unable = '"outcome": "unable_to_resolve"' in text
 
         if security_escalated:
@@ -165,7 +223,24 @@ class ScriptedProvider:
                         "error", "timeout", "connected but", "internal site", "internal service",
                     )
                 )
+                has_network_context = any(
+                    phrase in employee_text
+                    for phrase in (
+                        "home", "office", "hotspot", "wi-fi", "wifi", "multiple networks",
+                        "password change", "vpn update", "os update", "windows update", "macos update",
+                    )
+                )
                 if has_network_detail:
+                    if not has_network_context:
+                        return decision(
+                            decision="ask_employee", category="network", risk_level="medium",
+                            intent="VPN connectivity diagnosis",
+                            question_for_employee=(
+                                "Does it drop on more than one network, such as both Wi-Fi and a phone hotspot, "
+                                "and did this start after a password, VPN, or operating-system update?"
+                            ),
+                            reason="network diagnostics need environment and recent-change context for an intermittent drop",
+                        )
                     return decision(
                         target_specialist="network", category="network", risk_level="medium",
                         intent="VPN connectivity diagnosis",
@@ -270,7 +345,7 @@ class ScriptedProvider:
                 "tool_call": None,
                 "result": {
                     "agent": "identity",
-                    "outcome": "resolved",
+                    "outcome": "resolution_recommended",
                     "findings": [],
                     "tools_used": [],
                     "confidence": 0.88,
@@ -302,6 +377,13 @@ class ScriptedProvider:
                     "error", "timeout", "connected but", "internal site", "internal service",
                 )
             )
+            has_network_context = any(
+                phrase in employee_text
+                for phrase in (
+                    "home", "office", "hotspot", "wi-fi", "wifi", "multiple networks",
+                    "password change", "vpn update", "os update", "windows update", "macos update",
+                )
+            )
             if not has_network_detail:
                 return finish(
                     agent="network",
@@ -323,8 +405,29 @@ class ScriptedProvider:
                         "diagnostics can distinguish connection, stability, and access paths."
                     ),
                 )
+            if not has_network_context:
+                return finish(
+                    agent="network",
+                    outcome="need_more_information",
+                    findings=[{
+                        "agent": "network",
+                        "summary": "Employee reports an intermittent VPN failure; affected networks and recent changes are not yet known",
+                        "severity": "low",
+                        "tags": ["vpn", "intermittent"],
+                        "detail": "",
+                    }],
+                    question_for_employee=(
+                        "Does it drop on more than one network, such as both Wi-Fi and a phone hotspot, "
+                        "and did this start after a password, VPN, or operating-system update?"
+                    ),
+                    reasoning_summary=(
+                        "Network scope and recent changes distinguish a local connection problem from stale VPN credentials or a client issue."
+                    ),
+                )
             if "[check_vpn_status]" not in text:
                 return call("check_vpn_status")
+            if "[run_connectivity_diagnostics]" not in text:
+                return call("run_connectivity_diagnostics")
             if "[inspect_recent_vpn_session]" not in text:
                 return call("inspect_recent_vpn_session")
             if "flagged" in observations and (
@@ -351,14 +454,15 @@ class ScriptedProvider:
                 )
             return finish(
                 agent="network",
-                outcome="resolved",
+                outcome="resolution_recommended",
                 findings=[{"agent": "network", "summary": "VPN and connectivity diagnostics do not show an active fault at the time of the check", "severity": "low", "tags": ["vpn"], "detail": ""}],
                 resolution_summary=(
-                    "I couldn't reproduce a VPN fault during this check, although that doesn't "
-                    "invalidate what you experienced. If it happens again, note the time and any "
-                    "error message, then reconnect once and send those details so we can compare them."
+                    "The VPN gateway is reachable and the current connection path is healthy, but that "
+                    "doesn't invalidate the intermittent drops you reported. Please disconnect the VPN "
+                    "fully, quit and reopen the VPN client, sign in again, and leave it connected for a "
+                    "couple of minutes. Then tell me whether it stays stable."
                 ),
-                reasoning_summary="Diagnostics did not reproduce the reported issue, so the next step preserves the employee's symptom for targeted follow-up.",
+                reasoning_summary="Point-in-time diagnostics are healthy, so a clean client reconnect is the safest discriminating remediation before judging the intermittent symptom.",
             )
 
         if agent == "security":
@@ -479,7 +583,7 @@ class ScriptedProvider:
             if "96" in text or "disk nearly full" in text:
                 return finish(
                     agent="endpoint",
-                    outcome="resolved",
+                    outcome="resolution_recommended",
                     findings=[{"agent": "endpoint", "summary": "Disk is 96% full, which explains the slowdown", "severity": "medium", "tags": ["disk"], "detail": ""}],
                     resolution_summary=(
                         "Your disk is 96% full, which is why the laptop feels slow. Free up space "
@@ -490,7 +594,7 @@ class ScriptedProvider:
                 )
             return finish(
                 agent="endpoint",
-                outcome="resolved",
+                outcome="resolution_recommended",
                 findings=[{"agent": "endpoint", "summary": "Device health check shows no critical issues", "severity": "low", "tags": [], "detail": ""}],
                 resolution_summary=(
                     "Your device checks out healthy. A restart clears most lingering slowness; "
@@ -541,7 +645,7 @@ class ScriptedProvider:
         if observed:
             return finish(
                 agent="identity",
-                outcome="resolved",
+                outcome="resolution_recommended",
                 findings=[{"agent": "identity", "summary": "Account is active with no unusual activity", "severity": "low", "tags": [], "detail": ""}],
                 resolution_summary=(
                     "Your account looks healthy — active, no lockouts, and no unusual sign-in "

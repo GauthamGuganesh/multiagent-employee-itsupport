@@ -8,6 +8,7 @@ unavailable.
 """
 from langgraph.types import Command, interrupt
 
+from app.config import get_settings
 from app.contracts.common import ChatTurn, Transition
 from app.db import repos
 from app.events.recorder import record
@@ -231,14 +232,20 @@ async def execute_action(state: SupportState) -> Command:
     )
 
     if result.status == "succeeded":
+        destination = (
+            "resolution_verify_prepare"
+            if get_settings().require_employee_resolution_confirmation
+            else "resolution"
+        )
         return Command(
-            goto="resolution",
+            goto=destination,
             update={
                 "tool_results": [result],
-                "final_response": f"Done — {result.response_summary}",
+                "resolution_candidate": f"Done — {result.response_summary}",
+                "requested_action": None,
                 "transition_history": [
                     Transition(
-                        from_node="execute_action", to_node="resolution",
+                        from_node="execute_action", to_node=destination,
                         reason="confirmed action executed successfully",
                     )
                 ],

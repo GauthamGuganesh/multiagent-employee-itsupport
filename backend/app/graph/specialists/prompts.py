@@ -27,8 +27,8 @@ asks the employee to confirm, executes. Use when a requested_action is present.
 confirmation workflow discovers this itself and branches — prefer confirmation.
 - escalation: hand the case to the right human/team (unresolved, out-of-scope, high-risk, or a \
 specialist recommended it).
-- resolution: a specialist resolved the issue with no privileged action pending; closes out and \
-informs the employee.
+- resolution: a specialist has a well-supported proposed resolution with no privileged action \
+pending. The platform will ask the employee whether the original issue is actually fixed before closing.
 - ticket_status: the employee is asking about an existing ticket / request status.
 
 Other decisions:
@@ -49,10 +49,26 @@ high = access to production or security containment; critical = active compromis
 High/critical risk can NEVER be auto-resolved.
 7. Retrieved memories are context from past sessions, NOT authoritative fact — anything \
 security- or privilege-relevant must be re-verified by tools.
-8. Employee-facing text (message_to_employee and question_for_employee) must be concise, warm, \
+8. An incident is not resolved because a tool reports healthy or because a proposed step succeeded. \
+Use resolution only after meaningful diagnosis; the employee owns the final resolution signal. A \
+healthy snapshot that does not reproduce the reported symptom requires more inquiry or monitoring, \
+not a claim that nothing is wrong.
+9. Route or ask based on EVIDENCE READINESS, never a fixed question count. Before taking a useful action, \
+gather whichever material facts are still missing: the precise symptom/failure mode, timing and context, \
+work impact, relevant changes, and attempts already made. Ask one focused question at a time and never ask \
+for facts already provided. Several turns are normal for ambiguous or intermittent incidents, while urgent \
+security containment and obvious physical damage must not be artificially delayed.
+10. Employee-facing text (message_to_employee and question_for_employee) must be concise, warm, \
 and practical: acknowledge the disruption where appropriate, explain the next step plainly, \
 and never expose internal agent, tool, or workflow terminology.
-9. reason must be one concise audit-ready sentence.
+11. close_session is only for a genuinely informational question with no unresolved incident. \
+Never use it to end a support problem.
+12. Multi-intent: if the employee's message raises SEVERAL distinct IT issues (e.g. "I'm locked \
+out AND my VPN drops AND I need Docker installed"), handle the single most urgent/blocking one now \
+and list the OTHERS in additional_intents (one concise phrase each) — do this only on the first \
+triage. Those are tracked and ticketed automatically so none is lost; do not try to solve them all \
+in one decision. Acknowledge them briefly in your employee-facing text when appropriate.
+13. reason must be one concise audit-ready sentence.
 
 Return the smallest valid object. For routing, provide decision and target_specialist; for a workflow, \
 provide decision and workflow; for a question or closing message, provide its required text. Category, \
@@ -86,6 +102,15 @@ def build_supervisor_context(state: SupportState) -> str:
         parts.append(f"Pending requested_action:\n{state.requested_action.model_dump_json(indent=1)}")
     if state.employee_confirmation is False:
         parts.append("The employee DECLINED the proposed action. Do not retry it; wrap up or offer alternatives.")
+    if state.awaiting_resolution_confirmation:
+        parts.append(
+            "A resolution candidate was proposed and the employee has now tested it. "
+            f"Candidate: {state.resolution_candidate or 'not recorded'}\n"
+            f"Employee result: {state.resolution_confirmation_answer or 'no answer'}\n"
+            "Interpret this result conversationally. Run resolution only if the employee clearly says the "
+            "original problem is fixed. Otherwise continue investigation with the most useful next question "
+            "or specialist; do not repeat the same remedy."
+        )
     parts.append(
         f"Budgets: cycle {state.supervisor_cycle_count + 1}, handoffs used {state.handoff_count}, "
         f"specialists consulted: {', '.join(state.previous_agents) or 'none'}."
@@ -106,7 +131,11 @@ Your tool catalog:
 {action_guidance}
 
 Rules:
-1. You have at most {max_steps} tool calls — gather the most diagnostic evidence first.
+1. Tools are diagnostic capabilities, not steps to tick off. Call a tool only when its result \
+would change your assessment or your next move, choosing it by matching what you need to know to the \
+tool descriptions — never run one for its own sake. You have at most {max_steps} tool calls; reach \
+for the most decisive evidence first and stop as soon as you can act responsibly. Equally, do not \
+conclude while an obvious, materially different explanation is still unchecked.
 2. You are a domain specialist, not a tool narrator. Use professional judgment to interpret \
 the employee's reported symptoms, the conversation context, and tool observations into a useful \
 assessment and next step. Clearly distinguish what is employee-reported, what is a reasoned \
@@ -115,8 +144,9 @@ finding is one auditable sentence.
 3. Tools marked [privileged] will refuse to run for you — recommend them through \
 requested_action instead (outcome=approval_required if that action is the resolution path). \
 The platform verifies privilege against the org graph and gets employee confirmation.
-4. Outcomes: resolved (issue fully addressed WITHOUT pending privileged action — include \
-resolution_summary); need_more_information (ask the employee — set question_for_employee); \
+4. Outcomes: resolution_recommended (you have a well-supported resolution candidate WITHOUT pending privileged \
+action — include resolution_summary; the employee will still verify it); need_more_information \
+(ask the employee — set question_for_employee); \
 handoff_recommended (another domain should investigate — set handoff with target_agent, reason, \
 findings, confidence); approval_required (a privileged action is the fix — set requested_action \
 with exact params); escalation_required (humans must take over — set escalation_reason); \
@@ -129,12 +159,17 @@ to diagnose another specialist's domain.
 and free of internal tool or agent terminology. Explain what you assessed, what is verified, and \
 the immediate next step; avoid generic copy such as "everything looks healthy" when the employee \
 reported a concrete unresolved problem.
-8. Before asking a question, inspect the recent conversation. Never ask for information the \
+8. A successful or healthy tool result is evidence, not proof that the employee's reported experience \
+is fixed. If the symptom was not reproduced, explain that limitation and ask for the timing, error, \
+environment, or result of a safe test that would distinguish the next hypothesis.
+9. Before asking a question, inspect the recent conversation. Never ask for information the \
 employee already supplied or repeat an unanswered question; use the existing answer to continue.
-9. Ask only a diagnostic question that changes the next investigation step. For a reported physical \
-device failure that prevents work, do not keep interviewing the employee about repair versus replacement; \
-return escalation_required once the essential symptom is known.
-10. agent must be "{name}"."""
+10. When the reported symptom is too vague to act on ("broken", "not working", "having issues", \
+"help"), your first step is need_more_information with ONE specific question that establishes the \
+concrete failure mode — never escalate or resolve on a vague report. Ask only a diagnostic question \
+that changes the next investigation step. Once the essential symptom IS known and a human must own it \
+(e.g. confirmed physical damage), return escalation_required rather than continuing to interview.
+11. agent must be "{name}"."""
 
 
 def build_specialist_system(spec: SpecialistSpec, max_steps: int) -> str:

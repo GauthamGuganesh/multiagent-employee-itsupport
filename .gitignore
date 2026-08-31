@@ -17,6 +17,9 @@ backend/.memstore/
 *.sqlite3
 *.db
 
+# Local dev-server logs
+.local-*.log
+
 # Node
 node_modules/
 frontend/.next/

@@ -11,6 +11,7 @@ if sys.platform == "win32":
 
 import app.tools  # noqa: F401  (register all mock tools)
 from app.api import dispatcher
+from app.config import get_settings
 from app.contracts.common import PrivilegeCheckResult
 from app.db.base import Base, dispose_engine, init_engine
 from app.graph.build import build_graph
@@ -51,6 +52,15 @@ def world():
     reset_world()
     yield
     reset_world()
+
+
+@pytest.fixture(autouse=True)
+def legacy_conversation_policy(monkeypatch):
+    """Older graph tests focus on one workflow at a time. Dedicated quality
+    tests below exercise the production multi-turn policy end to end."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "require_employee_resolution_confirmation", False)
+    monkeypatch.setattr(settings, "create_ticket_for_resolved_sessions", True)
 
 
 @pytest.fixture(autouse=True)
@@ -148,7 +158,7 @@ def specialist_tool_step(tool_name: str, **params) -> dict:
 def specialist_finish(**overrides) -> dict:
     result = {
         "agent": "identity",
-        "outcome": "resolved",
+        "outcome": "resolution_recommended",
         "findings": [],
         "tools_used": [],
         "confidence": 0.9,

@@ -13,7 +13,9 @@ from tests.conftest import specialist_finish, specialist_tool_step, supervisor_d
 def _queue_route_and_resolve(provider, specialist: str, category: str, summary: str):
     provider.enqueue(
         supervisor_decision(target_specialist=specialist, category=category),
-        specialist_finish(agent=specialist, outcome="resolved", resolution_summary=summary),
+        specialist_finish(
+            agent=specialist, outcome="resolution_recommended", resolution_summary=summary
+        ),
         supervisor_decision(
             decision="run_workflow", target_specialist=None, workflow="resolution",
             category=category,
@@ -48,7 +50,7 @@ async def test_supervisor_routes_to_each_specialist(
         assert specialist in agent_names
         specialist_run = next(r for r in runs if r.agent_name == specialist)
         assert specialist_run.status == "completed"
-        assert specialist_run.outcome == "resolved"
+        assert specialist_run.outcome == "resolution_recommended"
 
         ticket = (await s.scalars(select(Ticket))).one()
         assert ticket.status == "resolved"
@@ -72,7 +74,7 @@ async def test_endpoint_route_slow_laptop_uses_real_disk_check(graph, provider, 
         specialist_tool_step("check_disk_space"),
         specialist_finish(
             agent="endpoint",
-            outcome="resolved",
+            outcome="resolution_recommended",
             findings=[{
                 "agent": "endpoint",
                 "summary": "Disk is 96% used with only 9 GB free",
@@ -105,7 +107,7 @@ async def test_endpoint_route_slow_laptop_uses_real_disk_check(graph, provider, 
 
         runs = (await s.scalars(select(AgentRun))).all()
         endpoint_run = next(r for r in runs if r.agent_name == "endpoint")
-        assert endpoint_run.outcome == "resolved"
+        assert endpoint_run.outcome == "resolution_recommended"
         assert endpoint_run.tools_used == ["check_disk_space"]
 
         ticket = (await s.scalars(select(Ticket))).one()

@@ -5,7 +5,9 @@ Topology (edges select, nodes mutate; Command-returning nodes route themselves):
     START → ingest → supervisor ⇄ {identity, endpoint, network, security}
     supervisor → ask_prepare → ask_wait(interrupt) → supervisor
     supervisor → confirmation_prepare → confirmation_wait(interrupt)
-                 → execute_action → resolution | escalation
+                 → execute_action → resolution verification | escalation
+    supervisor → resolution_verify_prepare → resolution_verify_wait(interrupt)
+                 → supervisor → resolution (only after employee confirmation)
     confirmation_prepare → approval | escalation
     supervisor → ticket_status → close_direct | escalation
     resolution | close_direct | approval | escalation → END
@@ -27,6 +29,10 @@ from app.graph.workflows.confirmation import (
 from app.graph.workflows.escalation import escalation_node
 from app.graph.workflows.need_info import ask_prepare, ask_wait
 from app.graph.workflows.resolution import close_direct_node, resolution_node
+from app.graph.workflows.resolution_verification import (
+    resolution_verify_prepare,
+    resolution_verify_wait,
+)
 from app.graph.workflows.ticket_status import ticket_status_node
 
 SPECIALIST_NODES = tuple(SPECS.keys())
@@ -41,7 +47,7 @@ def build_graph(checkpointer=None):
         supervisor_node,
         destinations=(
             *SPECIALIST_NODES, "ask_prepare", "confirmation_prepare", "approval",
-            "escalation", "resolution", "ticket_status", "close_direct",
+            "escalation", "resolution", "resolution_verify_prepare", "ticket_status", "close_direct",
         ),
     )
     for spec in SPECS.values():
@@ -59,9 +65,19 @@ def build_graph(checkpointer=None):
         confirmation_wait,
         destinations=("execute_action", "supervisor"),
     )
-    g.add_node("execute_action", execute_action, destinations=("resolution", "escalation"))
+    g.add_node(
+        "execute_action",
+        execute_action,
+        destinations=("resolution", "resolution_verify_prepare", "escalation"),
+    )
     g.add_node("ticket_status", ticket_status_node, destinations=("close_direct", "escalation"))
     g.add_node("resolution", resolution_node)
+    g.add_node("resolution_verify_prepare", resolution_verify_prepare)
+    g.add_node(
+        "resolution_verify_wait",
+        resolution_verify_wait,
+        destinations=("resolution", "supervisor"),
+    )
     g.add_node("close_direct", close_direct_node)
     g.add_node("approval", approval_node, destinations=(END, "escalation"))
     g.add_node("escalation", escalation_node)
@@ -72,6 +88,7 @@ def build_graph(checkpointer=None):
         g.add_edge(name, "supervisor")
     g.add_edge("ask_prepare", "ask_wait")
     g.add_edge("ask_wait", "supervisor")
+    g.add_edge("resolution_verify_prepare", "resolution_verify_wait")
     g.add_edge("resolution", END)
     g.add_edge("close_direct", END)
     g.add_edge("escalation", END)

@@ -285,7 +285,7 @@ class SpecialistStep(BaseModel):       # each iteration of the internal loop
 
 class SpecialistResult(BaseModel):
     agent: SpecialistName
-    outcome: Literal["resolved", "need_more_information", "handoff_recommended",
+    outcome: Literal["resolution_recommended", "need_more_information", "handoff_recommended",
                      "approval_required", "escalation_required", "unable_to_resolve"]
     findings: list[Finding]
     tools_used: list[str]
@@ -298,6 +298,11 @@ class SpecialistResult(BaseModel):
     resolution_summary: str | None = None
     # model_validator enforces outcome-specific required fields.
 ```
+
+`resolution_recommended` is deliberately non-terminal: it means the specialist
+has enough evidence to propose a remediation or result. The Supervisor pauses
+for the employee to test it; only employee confirmation permits terminal
+`resolved`. Routine resolved conversations do not create tickets.
 
 Success/failure criteria from the brief are encoded as validators plus guard
 checks in code (supervisor target must be a real node; risk constraints:

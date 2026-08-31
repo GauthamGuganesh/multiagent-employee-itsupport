@@ -42,14 +42,14 @@ class SpecialistResult(BaseModel):
     )
     requested_action: RequestedAction | None = Field(
         default=None,
-        description="Required when outcome=approval_required; also set when a resolved outcome "
+        description="Required when outcome=approval_required; also set when a recommended resolution "
         "needs a privileged action executed via the confirmation workflow",
     )
     escalation_reason: str | None = Field(
         default=None, description="Required when outcome=escalation_required"
     )
     resolution_summary: str | None = Field(
-        default=None, description="Required when outcome=resolved"
+        default=None, description="Required when outcome=resolution_recommended"
     )
 
     @model_validator(mode="after")
@@ -62,8 +62,8 @@ class SpecialistResult(BaseModel):
             raise ValueError("approval_required requires requested_action")
         if self.outcome == "escalation_required" and not self.escalation_reason:
             raise ValueError("escalation_required requires escalation_reason")
-        if self.outcome == "resolved" and not self.resolution_summary:
-            raise ValueError("resolved requires resolution_summary")
+        if self.outcome == "resolution_recommended" and not self.resolution_summary:
+            raise ValueError("resolution_recommended requires resolution_summary")
         return self
 
 

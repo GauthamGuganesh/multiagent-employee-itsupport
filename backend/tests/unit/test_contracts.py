@@ -130,11 +130,13 @@ def test_confidence_bounds_enforced():
 
 # --- SpecialistResult: outcome-specific required fields (all six) ------------
 
-def test_resolved_requires_resolution_summary():
-    with pytest.raises(ValidationError, match="resolved requires resolution_summary"):
-        SpecialistResult.model_validate(_result(outcome="resolved", resolution_summary=None))
+def test_resolution_recommendation_requires_summary():
+    with pytest.raises(
+        ValidationError, match="resolution_recommended requires resolution_summary"
+    ):
+        SpecialistResult.model_validate(_result(outcome="resolution_recommended", resolution_summary=None))
     ok = SpecialistResult.model_validate(
-        _result(outcome="resolved", resolution_summary="cleared the disk")
+        _result(outcome="resolution_recommended", resolution_summary="cleared the disk")
     )
     assert ok.resolution_summary == "cleared the disk"
 
@@ -237,7 +239,7 @@ def test_step_valid_call_tool_parses():
 def test_step_valid_finish_parses():
     step = SpecialistStep.model_validate(specialist_finish())
     assert step.action == "finish"
-    assert step.result.outcome == "resolved"
+    assert step.result.outcome == "resolution_recommended"
 
 
 # --- HandoffRequest confidence bounds ----------------------------------------

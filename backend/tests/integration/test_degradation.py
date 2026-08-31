@@ -168,7 +168,10 @@ async def test_dispatcher_fail_safe_on_graph_exception(graph, provider):
     assert result["terminal_status"] == "failed"
     assert result["pending"] is None
     assert result["ticket_number"] is not None
-    assert "went wrong" in result["final_response"]
+    # The fail-safe reply must be concrete: name the problem and the tracking
+    # ticket so the employee knows exactly what happened and what to expect.
+    assert "technical problem" in result["final_response"]
+    assert result["ticket_number"] in result["final_response"]
 
     async with db_session() as s:
         ticket = (await s.scalars(select(Ticket).where(Ticket.session_id == session_id))).one()

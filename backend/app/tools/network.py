@@ -1,9 +1,9 @@
 """Network-domain tools over the mock world (VPN and connectivity).
 
 All five tools are read-only diagnostics — none mutate state, so none are
-privileged. inspect_recent_vpn_session deliberately surfaces any flagged or
-unrecognized client IP in its summary so the specialist cannot miss the
-security signal and can hand off to the security domain.
+privileged. Each tool answers a specific diagnostic question; the specialist
+chooses which to run from the tool descriptions and what it has observed so
+far, rather than following a fixed script.
 """
 from typing import Any
 
@@ -232,10 +232,12 @@ register(
     ToolSpec(
         name="inspect_recent_vpn_session",
         description=(
-            "Inspect the employee's recent VPN sessions: start time, duration, "
-            "client IP, gateway, and a flagged marker with a note for sessions "
-            "from unrecognized networks. Returns the flagged count and calls "
-            "out any suspicious client IP explicitly. Read-only."
+            "Inspect the employee's recent VPN sessions to answer 'were any of "
+            "these sessions from an unfamiliar or unrecognized network?' Returns "
+            "each session's start time, client IP, and gateway, plus a flagged "
+            "count for sessions that don't match the employee's usual network — "
+            "the way to tell whether repeated drops hide a session/access anomaly "
+            "rather than a plain connectivity fault. Read-only."
         ),
         domain="network",
         input_model=InspectRecentVpnSessionInput,

@@ -51,9 +51,12 @@ result to the shared LangGraph state. Specialists never call one another.
    Each tool call is typed, recorded, and capped by `MAX_SPECIALIST_TOOL_STEPS`.
 4. The specialist returns one `SpecialistResult` outcome. The Supervisor either
    selects another specialist, asks the employee for information, or begins a
-   deterministic workflow.
+   deterministic workflow. A specialist may recommend a resolution but cannot
+   close the support session.
 5. Workflows in `graph/workflows/` handle confirmation, approval, escalation,
-   resolution, and ticket aging. They—not a model—execute business procedures.
+   resolution verification, resolution, and ticket aging. Proposed fixes pause
+   at a LangGraph interrupt; the same thread resumes with the employee's test
+   result, and the Supervisor decides whether to continue or close.
 6. PostgreSQL records the session, messages, agent runs, tool calls, ticket
    changes, confirmations, and audit events. SSE broadcasts the already-persisted
    event to the UI.

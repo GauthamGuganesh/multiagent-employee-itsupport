@@ -54,7 +54,9 @@ async def test_ask_employee_pauses_then_resumes_to_resolution(graph, provider, o
         supervisor_decision(
             target_specialist="network", category="network", intent="VPN unreachable"
         ),
-        specialist_finish(agent="network", outcome="resolved", resolution_summary=RESOLUTION),
+        specialist_finish(
+            agent="network", outcome="resolution_recommended", resolution_summary=RESOLUTION
+        ),
         supervisor_decision(
             decision="run_workflow", target_specialist=None, workflow="resolution",
             category="network",

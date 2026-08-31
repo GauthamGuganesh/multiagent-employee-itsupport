@@ -50,7 +50,11 @@ async def test_supervisor_recovers_after_two_invalid_outputs(graph, provider, or
         INVALID,
         INVALID,
         supervisor_decision(target_specialist="identity"),
-        specialist_finish(agent="identity", outcome="resolved", resolution_summary="Sign-in restored."),
+        specialist_finish(
+            agent="identity",
+            outcome="resolution_recommended",
+            resolution_summary="Sign-in restored.",
+        ),
         supervisor_decision(decision="run_workflow", target_specialist=None, workflow="resolution"),
     )
 

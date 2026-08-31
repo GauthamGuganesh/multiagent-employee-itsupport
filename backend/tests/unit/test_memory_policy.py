@@ -21,7 +21,7 @@ def make_state(**overrides) -> SupportState:
 def resolved_result(agent: str = "endpoint", resolution: str = "clearing disk space") -> SpecialistResult:
     return SpecialistResult(
         agent=agent,
-        outcome="resolved",
+        outcome="resolution_recommended",
         confidence=0.9,
         reasoning_summary="test",
         resolution_summary=resolution,

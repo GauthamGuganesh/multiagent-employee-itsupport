@@ -37,6 +37,15 @@ class SupervisorDecision(BaseModel):
     )
     reason: str = Field(default="", description="Concise audit-ready rationale for this decision")
     confidence: float = Field(default=0.75, ge=0.0, le=1.0)
+    additional_intents: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Populate ONLY on the first triage of a message that contains several distinct "
+            "IT issues. List the OTHER issues, one concise phrase each, that you are NOT "
+            "handling in this decision (you are handling the most urgent/blocking one now). "
+            "These are tracked so none is dropped. Leave empty for a single-issue request."
+        ),
+    )
 
     @model_validator(mode="after")
     def _decision_fields(self) -> "SupervisorDecision":

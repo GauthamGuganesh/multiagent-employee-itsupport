@@ -1,11 +1,8 @@
-/** Typed client for FastAPI. NEXT_PUBLIC_API_URL is a public origin only;
- * secrets always remain on Render. The local fallback is development-only. */
-
-const configuredOrigin = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
-const API_ORIGIN = configuredOrigin ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
+/** Typed client for FastAPI. All requests go through same-origin Next.js rewrites
+ * (/api/* → BACKEND_URL). Credentials flow naturally; no CORS configuration needed. */
 
 export function apiUrl(path: string): string {
-  return `${API_ORIGIN}${path}`;
+  return path; // Rewrite handles URL transformation; just return the path as-is.
 }
 
 export class ApiError extends Error {
@@ -17,7 +14,7 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(apiUrl(path), {
     ...init,
-    credentials: "include",
+    credentials: "include", // Same-origin rewrites auto-include cookies, but be explicit.
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
   if (!res.ok) {

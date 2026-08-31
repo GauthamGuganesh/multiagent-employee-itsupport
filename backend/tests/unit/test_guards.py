@@ -13,6 +13,7 @@ from app.graph.guards import (
     counts_as_handoff,
     decision_signature,
     endpoint_damage_requires_hardware_handoff,
+    resolution_answer_is_clearly_negative,
     security_requires_human,
 )
 from app.contracts.common import ChatTurn
@@ -37,7 +38,7 @@ def make_result(agent: str, outcome: str, **overrides) -> SpecialistResult:
         "confidence": 0.8,
         "reasoning_summary": "test",
     }
-    if outcome == "resolved":
+    if outcome == "resolution_recommended":
         payload["resolution_summary"] = "fixed"
     if outcome == "escalation_required":
         payload["escalation_reason"] = "needs human review"
@@ -184,6 +185,18 @@ def test_information_request_budget_is_session_lifetime(monkeypatch):
     assert verdict.kind == "information_request_budget"
 
 
+def test_negative_resolution_answer_blocks_closure():
+    state = make_state(resolution_confirmation_answer="No, it disconnected again.")
+    assert resolution_answer_is_clearly_negative(state) is True
+
+
+def test_stable_resolution_answer_is_not_misread_as_negative():
+    state = make_state(
+        resolution_confirmation_answer="Yes, it is stable and has not dropped again."
+    )
+    assert resolution_answer_is_clearly_negative(state) is False
+
+
 def test_physical_display_damage_after_endpoint_question_requires_handoff():
     state = make_state(
         original_request="I need a replacement laptop.",
@@ -213,8 +226,10 @@ def test_non_security_escalation_does_not_lock_the_session():
     assert security_requires_human(state) is False
 
 
-def test_security_resolved_does_not_require_human():
-    state = make_state(specialist_results=[make_result("security", "resolved")])
+def test_security_resolution_recommendation_alone_does_not_require_human():
+    state = make_state(
+        specialist_results=[make_result("security", "resolution_recommended")]
+    )
     assert security_requires_human(state) is False
 
 

@@ -66,6 +66,45 @@ def check_information_request(state: SupportState, question: str) -> GuardVerdic
     return GuardVerdict(tripped=False)
 
 
+def _employee_text(state: SupportState) -> str:
+    return " ".join(
+        [state.original_request]
+        + [turn.content for turn in state.recent_turns if turn.role == "employee"]
+    ).lower()
+
+
+def is_simple_informational_request(state: SupportState) -> bool:
+    """Allow concise answers for capability/how-to questions with no incident."""
+    text = _employee_text(state)
+    markers = (
+        "what can you", "what do you", "how can you help", "what kinds of",
+        "where can i find", "how do i contact", "who supports",
+    )
+    incident_terms = (
+        "not working", "can't", "cannot", "unable", "error", "broken", "locked",
+        "disconnect", "slow", "suspicious", "phishing", "install", "access",
+    )
+    return any(marker in text for marker in markers) and not any(term in text for term in incident_terms)
+
+
+def resolution_answer_is_clearly_negative(state: SupportState) -> bool:
+    """Hard safety veto; nuanced interpretation remains the supervisor's job."""
+    answer = (state.resolution_confirmation_answer or "").lower()
+    if any(
+        success in answer
+        for success in ("has not dropped again", "hasn't dropped again", "did not fail again")
+    ):
+        return False
+    words = set(re.findall(r"[a-z']+", answer))
+    phrases = (
+        "not fixed", "not resolved", "not working", "doesn't work", "does not work",
+        "isn't working", "is not working", "same issue", "disconnected again", "dropped again",
+    )
+    return bool(words & {"no", "still", "broken", "failing"}) or any(
+        phrase in answer for phrase in phrases
+    )
+
+
 def endpoint_damage_requires_hardware_handoff(state: SupportState) -> bool:
     """Recognize enough employee-reported evidence to stop a hardware re-interview.
 
@@ -93,6 +132,40 @@ def endpoint_damage_requires_hardware_handoff(state: SupportState) -> bool:
         for term in ("cannot work", "can't work", "unable to work", "not able to work", "disrupting my work")
     )
     return display_issue and physical_damage and work_impact
+
+
+_SPECIALISTS = ("identity", "endpoint", "network", "security")
+
+
+def pending_handoff_target(state: SupportState) -> str | None:
+    """The specialist a fresh handoff points at, or None.
+
+    A specialist's ``handoff_recommended`` outcome is a first-class routing
+    instruction, not a suggestion the supervisor may reinterpret as an
+    escalation. This returns the valid target so the supervisor can honor it in
+    code. It is deliberately conservative:
+
+    - the most recent specialist result must be an unconsumed handoff,
+    - the target must be a real specialist and not the agent that just ran
+      (a self-handoff is meaningless), and
+    - the target must not already have investigated *after* the handoff was
+      raised (prevents A→B→A ping-pong; the loop/handoff budgets remain the
+      final backstop).
+    """
+    if not state.specialist_results:
+        return None
+    latest = state.specialist_results[-1]
+    if latest.outcome != "handoff_recommended" or latest.handoff is None:
+        return None
+    target = latest.handoff.target_agent
+    if target not in _SPECIALISTS or target == latest.agent:
+        return None
+    # Don't force a re-consult of a specialist already run this turn; a genuine
+    # re-route on new evidence is still available to the model, and the loop /
+    # handoff budgets remain the backstop against A→B→A ping-pong.
+    if target in state.previous_agents:
+        return None
+    return target
 
 
 def check_cycle_budget(state: SupportState) -> GuardVerdict:

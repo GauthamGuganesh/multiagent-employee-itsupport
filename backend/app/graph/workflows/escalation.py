@@ -147,7 +147,7 @@ async def escalation_node(state: SupportState) -> dict:
         )
     else:
         response = (
-            "I'm sorry this is disrupting your work. I've moved the case to "
+            "I'm sorry this is disrupting your work. I've escalated the case to "
             f"{who}, who can take the next steps. Ticket {ticket_number} includes the "
             "evidence gathered so far and tracks the handoff."
         )

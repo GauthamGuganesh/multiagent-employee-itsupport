@@ -2,6 +2,7 @@
 import pytest
 
 from app.api import dispatcher
+from app.db import repos
 from app.api.routes_voice import (
     ElevenLabsExtraBody,
     OpenAICompletionRequest,
@@ -49,7 +50,7 @@ def test_render_health_and_voice_token_routes_are_registered():
 async def test_custom_llm_adapter_uses_only_newest_message_and_streams_done(monkeypatch):
     calls: list[tuple[str, str, str]] = []
 
-    async def start(employee_id: str, message: str, channel: str):
+    async def start(employee_id: str, message: str, channel: str, **_kwargs):
         calls.append(("start", employee_id, message))
         assert channel == "voice"
         return {
@@ -59,6 +60,11 @@ async def test_custom_llm_adapter_uses_only_newest_message_and_streams_done(monk
         }
 
     monkeypatch.setattr(dispatcher, "start_session", start)
+
+    async def no_existing_session(*_args):
+        return None
+
+    monkeypatch.setattr(repos, "find_active_voice_session", no_existing_session)
     response = await custom_llm_completion(
         OpenAICompletionRequest(
             stream=True,
@@ -111,11 +117,16 @@ async def test_custom_llm_adapter_resumes_explicit_support_session(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_custom_llm_adapter_accepts_secret_dynamic_variable_header(monkeypatch):
-    async def start(employee_id: str, message: str, channel: str):
+    async def start(employee_id: str, message: str, channel: str, **_kwargs):
         assert (employee_id, message, channel) == ("EMP-032", "Help with VPN", "voice")
         return {"session_id": "session-8", "pending": None, "assistant_message": "Let's check it."}
 
     monkeypatch.setattr(dispatcher, "start_session", start)
+
+    async def no_existing_session(*_args):
+        return None
+
+    monkeypatch.setattr(repos, "find_active_voice_session", no_existing_session)
     response = await custom_llm_completion(
         OpenAICompletionRequest(
             messages=[OpenAIMessage(role="user", content="Help with VPN")],
