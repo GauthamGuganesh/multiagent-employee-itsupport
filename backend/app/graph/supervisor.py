@@ -144,11 +144,15 @@ async def supervisor_node(state: SupportState) -> Command:
     decision = decision.model_copy(update=normalized)
     overrides: list[str] = []
 
-    # Direct closing is only for genuinely informational requests. Incidents
-    # must be investigated and then verified by the employee.
+    # Direct closing is reserved for genuinely helpful answers (advice/how-to/
+    # informational) — an unresolved fault must be investigated and then verified
+    # by the employee. Two exemptions: a request the employee can simply be
+    # answered on, and a graceful close right after the employee DECLINED a
+    # proposed action (re-interrogating them would disrespect their "no").
     if (
         decision.decision == "close_session"
         and settings.require_employee_resolution_confirmation
+        and state.employee_confirmation is not False
         and not guards.is_simple_informational_request(state)
     ):
         overrides.append("incident close_session overrode to a diagnostic question")
@@ -157,8 +161,9 @@ async def supervisor_node(state: SupportState) -> Command:
                 "decision": "ask_employee",
                 "message_to_employee": None,
                 "question_for_employee": (
-                    "I don’t want to close this before it is genuinely useful. What outcome do you need, "
-                    "and what exactly happens when you try it now?"
+                    "I want to make sure you walk away with this actually sorted. Tell me a little "
+                    "more about what you're running into — what are you trying to do, and what happens "
+                    "when you try? Even small details help me point you in the right direction."
                 ),
                 "reason": "The request describes an unresolved incident without enough evidence to close.",
             }

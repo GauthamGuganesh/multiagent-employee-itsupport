@@ -74,17 +74,61 @@ def _employee_text(state: SupportState) -> str:
 
 
 def is_simple_informational_request(state: SupportState) -> bool:
-    """Allow concise answers for capability/how-to questions with no incident."""
+    """Allow a direct, useful answer (close_session) instead of forcing a
+    diagnostic question or a specialist investigation. Covers three families
+    that are genuinely served best by simply *answering well* — the value is
+    being a helpful advisor, not opening a case:
+
+    - capability questions with no active incident ("what can you do"),
+    - guidance / how-to / advice questions ("how do I set up a second monitor",
+      "what's the best way to keep my laptop fast", "is it safe to use public
+      Wi-Fi") — the employee wants to be pointed the right way, and
+    - logistics / follow-up questions about a case already in play (who to
+      contact, who is handling it, how long it will take).
+
+    None of these needs an investigation, so the close_session override must
+    not hijack them into a cold diagnostic question. Anything that reads as an
+    *active, unresolved fault* (something broken or failing right now) is
+    deliberately excluded so real problems are still investigated — that is the
+    incident gate below.
+    """
     text = _employee_text(state)
-    markers = (
+    capability_markers = (
         "what can you", "what do you", "how can you help", "what kinds of",
         "where can i find", "how do i contact", "who supports",
     )
-    incident_terms = (
-        "not working", "can't", "cannot", "unable", "error", "broken", "locked",
-        "disconnect", "slow", "suspicious", "phishing", "install", "access",
+    # Guidance / how-to / advice phrasings: the employee wants direction, not a
+    # ticket. Gated on the absence of an active fault below, so "how do I fix my
+    # broken screen" still routes to investigation.
+    guidance_markers = (
+        "how do i", "how can i", "how to", "how would i", "how should i",
+        "best way to", "what's the best", "what is the best", "best practice",
+        "should i", "is it safe", "is it ok", "is it okay", "is there a way",
+        "what are the", "what happens if", "can you explain", "could you explain",
+        "explain how", "any tips", "tips for", "tips on", "advice on",
+        "recommend", "difference between",
     )
-    return any(marker in text for marker in markers) and not any(term in text for term in incident_terms)
+    # Logistics / follow-up phrasings — answerable directly even mid-incident.
+    logistics_markers = (
+        "who do i", "who should i", "who can i", "who is handling", "who's handling",
+        "who will", "how long", "how much longer", "what happens next", "any update",
+        "what's the update", "when will", "status of", "who to contact",
+    )
+    # An active fault, however phrased — the gate that keeps real incidents on
+    # the investigation path even when they arrive worded as a how-to.
+    incident_terms = (
+        "not working", "doesn't work", "does not work", "won't", "wont",
+        "can't", "cannot", "unable", "error", "broken", "locked", "disconnect",
+        "dropping", "drops", "slow", "crash", "freez", "frozen", "stuck",
+        "failing", "suspicious", "phishing", "hacked", "compromis",
+        "install", "access", "cracked", "shattered", "damaged", "damage",
+        "spilled", "liquid",
+    )
+    if any(marker in text for marker in logistics_markers):
+        return True
+    if any(term in text for term in incident_terms):
+        return False
+    return any(marker in text for marker in capability_markers + guidance_markers)
 
 
 def resolution_answer_is_clearly_negative(state: SupportState) -> bool:

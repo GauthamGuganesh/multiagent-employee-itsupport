@@ -3,7 +3,7 @@ import pytest
 
 from app.contracts.specialist import SpecialistStep
 from app.contracts.supervisor import SupervisorDecision
-from app.llm.scripted import ScriptedProvider
+from tests.scripted_provider import ScriptedProvider
 
 
 @pytest.mark.asyncio

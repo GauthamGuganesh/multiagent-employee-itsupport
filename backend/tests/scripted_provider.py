@@ -1,9 +1,10 @@
-"""Offline demo provider (IT_LLM_PROVIDER=scripted).
+"""Deterministic, keyword-routed LLM double for end-to-end conversation tests.
 
-Deterministic, keyword-routed structured decisions so the full platform runs
-without an API key: every guard, workflow, privilege check, and persistence
-path is real — only the judgment inside the supervisor/specialists is canned.
-Not used by tests (they script FakeProvider explicitly).
+This is a TEST FIXTURE, not a runtime provider — the shipped application only
+supports real providers and fails loudly without one. Tests inject this via
+`app.llm.provider.set_provider(ScriptedProvider())` to drive the full graph
+(every guard, workflow, privilege check, and persistence path is real) with
+deterministic, canned supervisor/specialist judgment.
 """
 import re
 from typing import Any

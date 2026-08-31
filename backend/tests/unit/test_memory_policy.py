@@ -71,8 +71,8 @@ def test_resolved_session_with_resolution_produces_memory():
     )
     memory = build_session_memory(state)
     assert memory == (
-        "On endpoint issue: My laptop is crawling since this morning "
-        "— resolved by clearing disk space"
+        "On a past endpoint issue (My laptop is crawling since this morning) "
+        "the fix was: clearing disk space"
     )
 
 
@@ -114,17 +114,17 @@ def test_resolved_without_resolution_summary_writes_nothing():
     assert build_session_memory(state) is None
 
 
-def test_security_escalation_produces_recurrence_memory():
+def test_security_escalation_writes_nothing():
+    """A past escalation (even security) is not a durable fact about the employee
+    and must never be remembered — retrieving it later would wrongly bias a
+    fresh, unrelated request toward security."""
     state = make_state(
         original_request="VPN keeps dropping and I got a strange MFA prompt",
         category="security",
         terminal_status="escalated",
         escalation_reason="impossible travel from unrecognized network",
     )
-    memory = build_session_memory(state)
-    assert memory is not None
-    assert memory.startswith("Recurring symptom to watch:")
-    assert "impossible travel from unrecognized network" in memory
+    assert build_session_memory(state) is None
 
 
 def test_non_security_escalation_writes_nothing():

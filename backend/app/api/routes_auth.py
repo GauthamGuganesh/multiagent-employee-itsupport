@@ -58,13 +58,16 @@ async def login(body: LoginRequest, response: Response):
         raise HTTPException(status_code=400, detail="employee id must look like EMP-001")
     if not is_valid_demo_password(employee_id, body.password):
         raise HTTPException(status_code=401, detail="invalid employee ID or password")
-    profile = None
+    # The org graph is a required component: if it's unreachable we fail loudly
+    # rather than issue a session for an unverifiable employee.
     try:
         profile = await org.get_employee_org_context(employee_id)
-        if profile is None:
-            raise HTTPException(status_code=404, detail="unknown employee")
-    except OrgUnavailableError:
-        profile = None  # directory down: allow demo login, profile resolves later
+    except OrgUnavailableError as exc:
+        raise HTTPException(
+            status_code=503, detail="organization directory unavailable"
+        ) from exc
+    if profile is None:
+        raise HTTPException(status_code=404, detail="unknown employee")
     response.set_cookie(COOKIE_NAME, make_session_cookie(employee_id), **_cookie_options())
     return {"employee_id": employee_id, "profile": profile}
 

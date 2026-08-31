@@ -1,15 +1,15 @@
 """LLM provider seam.
 
 `StructuredProvider.structured()` is the single abstraction every LLM-powered
-node uses. The real path delegates schema enforcement to
-`with_structured_output(include_raw=True)` (no regex, no JSON-in-prose); the
-fake path yields scripted raw dicts validated with `schema.model_validate`,
-which makes retry-1 / retry-2 / AgentFailure exactly testable offline.
+node uses. Only real providers exist here — they delegate schema enforcement to
+the model's native structured-output API (no regex, no JSON-in-prose). There is
+no in-app fake/scripted provider: a misconfigured LLM fails loudly at startup.
+Tests inject their own double via `set_provider()`.
 """
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from app.config import get_settings
 
@@ -117,73 +117,32 @@ class OpenAIProvider:
         return completion.choices[0].message.content or ""
 
 
-class FakeProvider:
-    """Deterministic scripted provider for tests and offline demos.
-
-    Enqueue raw dicts (or Pydantic instances) with `enqueue()`. Invalid dicts
-    fail `schema.model_validate` exactly like an invalid real response, which
-    drives the structured-output retry machinery.
-    """
-
-    def __init__(self) -> None:
-        self._queue: list[Any] = []
-        self._completions: list[str] = []
-        self.calls: list[tuple[str, list[tuple[str, str]]]] = []
-
-    def enqueue(self, *items: Any) -> None:
-        self._queue.extend(items)
-
-    def enqueue_completion(self, *texts: str) -> None:
-        self._completions.extend(texts)
-
-    async def structured(
-        self, schema: type[BaseModel], messages: list[tuple[str, str]]
-    ) -> StructuredAttempt:
-        self.calls.append((schema.__name__, messages))
-        if not self._queue:
-            return StructuredAttempt(
-                parsed=None, error="FakeProvider queue empty", raw_text=""
-            )
-        item = self._queue.pop(0)
-        if isinstance(item, BaseModel):
-            if isinstance(item, schema):
-                return StructuredAttempt(parsed=item, error=None, raw_text=item.model_dump_json())
-            item = item.model_dump()
-        try:
-            parsed = schema.model_validate(item)
-            return StructuredAttempt(parsed=parsed, error=None, raw_text=str(item))
-        except ValidationError as exc:
-            return StructuredAttempt(parsed=None, error=str(exc), raw_text=str(item))
-
-    async def complete(self, messages: list[tuple[str, str]]) -> str:
-        if self._completions:
-            return self._completions.pop(0)
-        return "Summary unavailable."
-
-
 _provider: StructuredProvider | None = None
+
+# The only providers the running system will ever use. There is deliberately no
+# offline / stub / scripted fallback: a misconfigured LLM must fail loudly, not
+# silently degrade to a fake one. Tests inject their own double via set_provider.
+_REAL_PROVIDERS: dict[str, type] = {
+    "openai": OpenAIProvider,
+    "anthropic": AnthropicProvider,
+}
 
 
 def get_provider() -> StructuredProvider:
     global _provider
     if _provider is None:
         settings = get_settings()
-        if settings.llm_provider == "fake":
-            _provider = FakeProvider()
-        elif settings.llm_provider == "scripted":
-            from app.llm.scripted import ScriptedProvider
-
-            _provider = ScriptedProvider()
-        elif settings.llm_provider == "openai":
-            _provider = OpenAIProvider()
-        elif settings.llm_provider == "anthropic":
-            _provider = AnthropicProvider()
-        else:
-            raise ValueError(f"unsupported IT_LLM_PROVIDER: {settings.llm_provider}")
+        factory = _REAL_PROVIDERS.get(settings.llm_provider)
+        if factory is None:
+            raise RuntimeError(
+                f"IT_LLM_PROVIDER={settings.llm_provider!r} is not a supported provider. "
+                f"Set it to one of: {', '.join(sorted(_REAL_PROVIDERS))}."
+            )
+        _provider = factory()  # constructor raises loudly if its API key is missing
     return _provider
 
 
 def set_provider(provider: StructuredProvider | None) -> None:
-    """Test/demo hook."""
+    """Test hook: inject a double, or reset with None."""
     global _provider
     _provider = provider

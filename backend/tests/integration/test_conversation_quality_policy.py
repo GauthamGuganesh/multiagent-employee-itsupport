@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.db.base import db_session
 from app.db.models import AgentRun, Message, SupportSession, Ticket
 from app.llm.provider import set_provider
-from app.llm.scripted import ScriptedProvider
+from tests.scripted_provider import ScriptedProvider
 
 
 def _enable_production_policy(monkeypatch) -> None:

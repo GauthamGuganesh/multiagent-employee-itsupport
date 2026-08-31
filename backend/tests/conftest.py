@@ -15,9 +15,10 @@ from app.config import get_settings
 from app.contracts.common import PrivilegeCheckResult
 from app.db.base import Base, dispose_engine, init_engine
 from app.graph.build import build_graph
-from app.llm.provider import FakeProvider, set_provider
+from app.llm.provider import set_provider
 from app.memory.service import set_memory_service
 from app.tools.mockworld import reset_world
+from tests.fakes import FakeProvider
 
 
 class _NullMemory:

@@ -13,9 +13,11 @@ from app.graph.guards import (
     counts_as_handoff,
     decision_signature,
     endpoint_damage_requires_hardware_handoff,
+    is_simple_informational_request,
     resolution_answer_is_clearly_negative,
     security_requires_human,
 )
+import pytest
 from app.contracts.common import ChatTurn
 from app.graph.state import SupportState
 from tests.conftest import supervisor_decision
@@ -208,6 +210,51 @@ def test_physical_display_damage_after_endpoint_question_requires_handoff():
         )],
     )
     assert endpoint_damage_requires_hardware_handoff(state) is True
+
+
+# --- is_simple_informational_request -----------------------------------------
+
+def _info_state(request: str, turns: tuple[str, ...] = ()) -> SupportState:
+    return make_state(
+        original_request=request,
+        recent_turns=[ChatTurn(role="employee", content=t) for t in turns],
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "How do I set up a second monitor?",
+        "What's the best way to keep my laptop fast over time?",
+        "Is it safe to use public Wi-Fi for email?",
+        "Who do I contact about my request?",
+        "How long will my request take?",
+        "What can you help me with?",
+        # Regression guard: "change" must NOT be read as the incident term
+        # "hang" (a past substring collision that broke this whole family).
+        "How do I change my email signature?",
+        "How do I change my display resolution?",
+    ],
+)
+def test_informational_requests_allow_direct_answer(text):
+    assert is_simple_informational_request(_info_state(text)) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "My laptop is broken and won't turn on",
+        "My VPN keeps dropping",
+        "I am locked out of my account",
+        "How do I fix my broken screen?",
+        "My screen is cracked, how do I get it replaced?",
+        "I spilled coffee on my keyboard",
+        "My account was hacked",
+        "The app keeps freezing",
+    ],
+)
+def test_active_faults_are_not_treated_as_informational(text):
+    assert is_simple_informational_request(_info_state(text)) is False
 
 
 # --- security_requires_human --------------------------------------------------

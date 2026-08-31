@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     )
 
     # --- LLM ---
-    llm_provider: str = "openai"  # openai | scripted | fake
+    # Only real providers are supported; a missing/unknown one fails loudly at
+    # startup. There is no offline/stub/scripted fallback.
+    llm_provider: str = "openai"  # openai | anthropic
     llm_model: str = "gpt-4o-mini"
     llm_max_tokens: int = 2048
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
@@ -48,8 +50,9 @@ class Settings(BaseSettings):
     neo4j_database: str = "neo4j"
 
     # --- Cross-session memory ---
-    memory_backend: str = "local"  # local | mem0 | off
-    memory_store_path: str = "./.memstore"  # local backend storage
+    # Mem0 is required; there is no local/off fallback. A missing MEM0_API_KEY
+    # fails loudly at startup.
+    memory_backend: str = "mem0"  # mem0 (required)
     memory_max_retrieved: int = 5
     mem0_api_key: str = Field(default="", validation_alias=AliasChoices("MEM0_API_KEY", "IT_MEM0_API_KEY"))
 

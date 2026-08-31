@@ -9,7 +9,7 @@ from app.conversation.compaction import (
     maybe_compact,
     needs_compaction,
 )
-from app.llm.provider import FakeProvider
+from tests.fakes import FakeProvider
 
 
 def turn(content: str, role: str = "employee") -> ChatTurn:

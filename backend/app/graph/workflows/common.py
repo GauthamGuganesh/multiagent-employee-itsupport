@@ -97,11 +97,15 @@ async def ingest_node(state: SupportState) -> dict:
         # per-turn budget reset (new employee input = new evidence)
         "supervisor_cycle_count": 0,
         "handoff_count": 0,
-        # a fresh message clears any stale terminal/interaction state
+        # a fresh message clears any stale terminal/interaction state. Clearing
+        # employee_confirmation is important: a decline from an earlier turn must
+        # not linger and silently disable the close_session safety override for
+        # the rest of the session (the override exempts a fresh decline only).
         "terminal_status": None,
         "final_response": None,
         "pending_question": None,
         "loop_guard_triggered": False,
+        "employee_confirmation": None,
     }
 
 
@@ -117,6 +121,20 @@ async def finalize_session(
     from app.memory.policy import build_session_memory
     from app.memory.service import get_memory_service
 
+    # Write cross-session memory FIRST, before any persistence. Mem0 is a
+    # required component with no silent fallback, so if the write fails it
+    # raises here — before the session is committed — and the dispatcher turns
+    # it into a single clean, audited escalation instead of a half-closed row.
+    closed_state = state.model_copy(
+        update={"terminal_status": terminal_status, "final_response": final_response}
+    )
+    memory_content = build_session_memory(closed_state)
+    memory_id = (
+        await get_memory_service().write(state.employee_id, memory_content)
+        if memory_content
+        else None
+    )
+
     # Never drop the other issues from a multi-intent message: open a tracked
     # ticket for each and tell the employee, as part of this closing turn.
     final_response = final_response + await _track_secondary_intents(state)
@@ -130,19 +148,13 @@ async def finalize_session(
         conversation_summary=state.conversation_summary,
     )
 
-    closed_state = state.model_copy(
-        update={"terminal_status": terminal_status, "final_response": final_response}
-    )
-    memory_content = build_session_memory(closed_state)
-    if memory_content:
-        memory_id = await get_memory_service().write(state.employee_id, memory_content)
-        if memory_id:
-            await record(
-                EventType.MEMORY_WRITTEN,
-                session_id=state.session_id,
-                actor="memory",
-                payload={"memory_id": memory_id, "content": memory_content},
-            )
+    if memory_id:
+        await record(
+            EventType.MEMORY_WRITTEN,
+            session_id=state.session_id,
+            actor="memory",
+            payload={"memory_id": memory_id, "content": memory_content},
+        )
 
     await record(
         EventType.SESSION_COMPLETED,

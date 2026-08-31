@@ -8,7 +8,6 @@ tickets, and security state are always re-verified via Neo4j/Postgres.
 import re
 
 from app.graph.state import SupportState
-from app.org.keys import SUPPORT_SECURITY
 
 # Exact normalized phrases that are never worth remembering.
 SKIP_PATTERNS: frozenset[str] = frozenset(
@@ -54,21 +53,14 @@ def _latest_resolution_summary(state: SupportState) -> str | None:
     return None
 
 
-def _is_security_case(state: SupportState) -> bool:
-    if state.category == "security":
-        return True
-    if state.human_target is not None and state.human_target.team_key == SUPPORT_SECURITY:
-        return True
-    return any(result.agent == "security" for result in state.specialist_results)
-
-
 def build_session_memory(state: SupportState) -> str | None:
-    """Distill a finished session into one durable fact, or None.
+    """Distill a finished session into one durable, USEFUL fact, or None.
 
-    Only sessions that ended meaningfully produce a memory: a genuine
-    resolution, or a security escalation whose symptom is worth recognizing
-    if it recurs. Everything else — pending approvals, failures, trivial
-    requests — writes nothing.
+    Only a genuine resolution is remembered — a concrete "this issue was fixed
+    this way" fact that can help next time. Escalations, pending approvals,
+    failures, and trivial requests write nothing: a note that a past session was
+    escalated (especially to security) is not a durable fact about the employee,
+    and retrieving it later would wrongly bias a fresh, unrelated request.
     """
     if not is_memorable(state.original_request):
         return None
@@ -77,11 +69,5 @@ def build_session_memory(state: SupportState) -> str | None:
         if not resolution:
             return None
         category = state.category or "other"
-        return f"On {category} issue: {state.original_request} — resolved by {resolution}"
-    if state.terminal_status == "escalated" and _is_security_case(state):
-        reason = state.escalation_reason or "escalated to the security team"
-        return (
-            f"Recurring symptom to watch: {state.original_request} — "
-            f"previously escalated as a security case ({reason})."
-        )
+        return f"On a past {category} issue ({state.original_request}) the fix was: {resolution}"
     return None

@@ -3,7 +3,7 @@ import pytest
 
 from app.api import dispatcher
 from app.llm.provider import set_provider
-from app.llm.scripted import ScriptedProvider
+from tests.scripted_provider import ScriptedProvider
 
 
 @pytest.mark.asyncio

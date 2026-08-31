@@ -45,21 +45,38 @@ async def _aging_sweep_loop() -> None:
 
 
 async def _make_checkpointer(stack: contextlib.AsyncExitStack):
-    """Postgres checkpointer when reachable; in-memory fallback for dev."""
+    """The Postgres checkpointer is required — interrupt/resume across HTTP
+    turns depends on durable state. No in-memory fallback: if Postgres is
+    unreachable the app must not come online."""
     settings = get_settings()
     dsn = settings.postgres_dsn.replace("+asyncpg", "").replace("+psycopg", "")
-    try:
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    # Fail fast and loud if Postgres is unreachable, instead of blocking boot on
+    # the default (long) connect timeout.
+    if "connect_timeout=" not in dsn:
+        dsn = f"{dsn}{'&' if '?' in dsn else '?'}connect_timeout=10"
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-        saver = await stack.enter_async_context(AsyncPostgresSaver.from_conn_string(dsn))
-        await saver.setup()
-        print("[startup] using Postgres checkpointer")
-        return saver
-    except Exception as exc:
-        from langgraph.checkpoint.memory import InMemorySaver
+    saver = await stack.enter_async_context(AsyncPostgresSaver.from_conn_string(dsn))
+    await saver.setup()
+    print("[startup] using Postgres checkpointer")
+    return saver
 
-        print(f"[startup] Postgres checkpointer unavailable ({exc!r}); using InMemorySaver")
-        return InMemorySaver()
+
+async def _verify_required_components() -> None:
+    """Fail loudly at boot if any required component is missing or unreachable.
+
+    This system is designed to run with real components — an LLM provider, the
+    Neo4j org graph, and Mem0 — and must never silently degrade to a stub or a
+    no-op. A misconfiguration here should stop the app from coming online.
+    """
+    from app.llm.provider import get_provider
+    from app.memory.service import get_memory_service
+    from app.org.client import run_query
+
+    get_provider()          # constructs the real LLM provider or raises
+    get_memory_service()    # constructs the Mem0 client or raises
+    await run_query("RETURN 1 AS ok")  # proves the Neo4j org graph is reachable
+    print("[startup] required components verified: LLM provider, Mem0, Neo4j")
 
 
 @asynccontextmanager
@@ -67,6 +84,7 @@ async def lifespan(app: FastAPI):
     init_engine()
     # Schema changes are applied explicitly through Alembic before startup.
     # Runtime create_all() masks missing migrations and permits schema drift.
+    await _verify_required_components()
 
     async with contextlib.AsyncExitStack() as stack:
         checkpointer = await _make_checkpointer(stack)
