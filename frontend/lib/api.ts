@@ -1,8 +1,17 @@
-/** Typed client for FastAPI. All requests go through same-origin Next.js rewrites
- * (/api/* → BACKEND_URL). Credentials flow naturally; no CORS configuration needed. */
+/** Typed client for FastAPI.
+ *
+ * Production (Vercel): set NEXT_PUBLIC_API_URL to the public backend origin
+ * (e.g. https://your-service.onrender.com). The browser then calls the backend
+ * directly with credentials; the backend allows this via CORS_ORIGINS and a
+ * `Secure; SameSite=None` session cookie.
+ *
+ * Local dev: leave NEXT_PUBLIC_API_URL unset. Calls stay relative (`/api/*`)
+ * and next.config.ts rewrites them to BACKEND_URL (default localhost:8000),
+ * so they're same-origin and need no CORS. */
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, "") || "";
 
 export function apiUrl(path: string): string {
-  return path; // Rewrite handles URL transformation; just return the path as-is.
+  return `${API_ORIGIN}${path}`;
 }
 
 export class ApiError extends Error {
